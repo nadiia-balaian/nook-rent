@@ -28,6 +28,12 @@ import {
   XCircle,
 } from 'lucide-react';
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
+import {
+  IDKitRequestWidget,
+  proofOfHuman,
+  type IDKitErrorCodes,
+  type IDKitResult,
+} from '@worldcoin/idkit';
 
 import {
   type AgentExecution,
@@ -41,6 +47,10 @@ import {
   nookApi,
   type ReservationResult,
   type SearchInput,
+  type WorldConnection,
+  type WorldIdHostConfig,
+  type WorldIdHostVerification,
+  type WorldIdRpContext,
 } from './api.js';
 import { DEFAULT_GUEST_QUERY, DEFAULT_SEARCH, DEMO_PROFILES, type DemoGuestKey } from './demo.js';
 
@@ -50,7 +60,6 @@ type Screen =
   | 'splash'
   | 'role'
   | 'identity'
-  | 'signals'
   | 'host-create'
   | 'host-review'
   | 'host-terms'
@@ -63,6 +72,8 @@ type Screen =
   | 'confirmed'
   | 'check-in';
 type BusyAction =
+  | 'connect-world'
+  | 'connect-world-id'
   | 'create-listing'
   | 'decide'
   | 'deposit'
@@ -157,6 +168,16 @@ function friendlyError(error: NookApiError): string {
       return 'This verified human already has an active hold.';
     case 'world_unavailable':
       return 'World AgentKit is not configured on the API yet.';
+    case 'world_id_unavailable':
+      return 'World ID is not configured on the API yet.';
+    case 'invalid_world_id_proof':
+      return 'World ID could not verify this proof. Please try again.';
+    case 'world_id_provider_unavailable':
+      return 'World ID verification is temporarily unavailable. Please try again.';
+    case 'world_id_already_bound':
+      return 'This World ID is already connected to another Host profile.';
+    case 'world_id_verification_required':
+      return 'Verify this Host with World ID before creating a Listing.';
     case 'agent_not_registered':
       return 'This human-backed Agent is not registered in Agent0 yet.';
     case 'agent_registration_inactive':
@@ -194,6 +215,12 @@ export function App() {
   const [listingDraft, setListingDraft] = useState(initialListingDraft);
   const [hostAgentDraft, setHostAgentDraft] = useState<HostAgentDraftResult | null>(null);
   const [createdListing, setCreatedListing] = useState<ListingDetail | null>(null);
+  const [worldConnection, setWorldConnection] = useState<WorldConnection | null>(null);
+  const [hostWorldIdConfig, setHostWorldIdConfig] = useState<WorldIdHostConfig | null>(null);
+  const [hostWorldIdRpContext, setHostWorldIdRpContext] = useState<WorldIdRpContext | null>(null);
+  const [hostWorldIdOpen, setHostWorldIdOpen] = useState(false);
+  const [hostWorldIdVerification, setHostWorldIdVerification] =
+    useState<WorldIdHostVerification | null>(null);
 
   const selectedGuest = DEMO_PROFILES[guestKey];
 
@@ -232,6 +259,11 @@ export function App() {
     setListingDraft(initialListingDraft);
     setHostAgentDraft(null);
     setCreatedListing(null);
+    setWorldConnection(null);
+    setHostWorldIdConfig(null);
+    setHostWorldIdRpContext(null);
+    setHostWorldIdOpen(false);
+    setHostWorldIdVerification(null);
     setError(null);
   };
 
@@ -255,7 +287,68 @@ export function App() {
 
   const selectRole = (nextRole: DemoRole) => {
     setRole(nextRole);
+    setWorldConnection(null);
+    setHostWorldIdConfig(null);
+    setHostWorldIdRpContext(null);
+    setHostWorldIdOpen(false);
+    setHostWorldIdVerification(null);
     navigate('identity');
+  };
+
+  const connectWorldAgent = async () => {
+    const result = await runAction('connect-world', () => nookApi.connectWorldAgent());
+    if (result) setWorldConnection(result);
+  };
+
+  const openHostWorldId = async () => {
+    setBusyAction('connect-world-id');
+    setError(null);
+
+    try {
+      const [config, rpContext] = await Promise.all([
+        nookApi.hostWorldIdConfig(),
+        nookApi.createHostWorldIdRpContext(),
+      ]);
+      setHostWorldIdConfig(config);
+      setHostWorldIdRpContext(rpContext);
+      setHostWorldIdOpen(true);
+    } catch (caught) {
+      setError(
+        caught instanceof NookApiError
+          ? caught
+          : new NookApiError('unexpected_error', 'Unexpected application error'),
+      );
+    } finally {
+      setBusyAction(null);
+    }
+  };
+
+  const verifyHostWorldId = async (proof: IDKitResult) => {
+    setBusyAction('connect-world-id');
+    setError(null);
+
+    try {
+      const verification = await nookApi.verifyHostWorldId({
+        profileId: DEMO_PROFILES.host.id,
+        proof,
+      });
+      setHostWorldIdVerification(verification);
+    } catch (caught) {
+      const apiError =
+        caught instanceof NookApiError
+          ? caught
+          : new NookApiError('unexpected_error', 'Unexpected application error');
+      setError(apiError);
+      throw caught;
+    } finally {
+      setBusyAction(null);
+    }
+  };
+
+  const handleWorldIdWidgetError = (code: IDKitErrorCodes) => {
+    setError(
+      new NookApiError('world_id_widget_error', `World ID stopped with ${code}. Try again.`),
+    );
   };
 
   const changeGuest = (nextGuestKey: DemoGuestKey) => {
@@ -504,13 +597,17 @@ export function App() {
         return <RoleScreen onBack={() => navigate('splash')} onSelect={selectRole} />;
       case 'identity':
         return (
-          <IdentityScreen onBack={() => navigate('role')} onContinue={() => navigate('signals')} />
-        );
-      case 'signals':
-        return (
-          <SignalsScreen
-            onBack={() => navigate('identity')}
+          <IdentityScreen
+            busy={busyAction === (role === 'guest' ? 'connect-world' : 'connect-world-id')}
+            connection={worldConnection}
+            error={error}
+            hostVerification={hostWorldIdVerification}
+            onBack={() => navigate('role')}
+            onConnect={
+              role === 'guest' ? () => void connectWorldAgent() : () => void openHostWorldId()
+            }
             onContinue={() => navigate(nextAfterOnboarding(role))}
+            role={role}
           />
         );
       case 'host-create':
@@ -519,7 +616,7 @@ export function App() {
             busy={busyAction === 'prepare-listing-draft'}
             draft={listingDraft}
             error={error}
-            onBack={() => navigate('signals')}
+            onBack={() => navigate('identity')}
             onSubmit={prepareListingDraft}
             setDraft={setListingDraft}
           />
@@ -554,7 +651,8 @@ export function App() {
             listing={createdListing}
             onGuestView={() => {
               setRole('guest');
-              navigate('guest-search');
+              setWorldConnection(null);
+              navigate('identity');
             }}
           />
         );
@@ -566,7 +664,7 @@ export function App() {
             error={error}
             guestKey={guestKey}
             guestQuery={guestQuery}
-            onBack={() => navigate('signals')}
+            onBack={() => navigate('identity')}
             onGuestChange={changeGuest}
             onQueryChange={setGuestQuery}
             onSubmit={searchListings}
@@ -640,7 +738,7 @@ export function App() {
     }
   };
 
-  const compact = ['splash', 'role', 'identity', 'signals'].includes(screen);
+  const compact = ['splash', 'role', 'identity'].includes(screen);
   const wide = screen === 'results';
 
   return (
@@ -659,6 +757,24 @@ export function App() {
           {renderScreen()}
         </div>
       </main>
+
+      {hostWorldIdConfig && hostWorldIdRpContext && (
+        <IDKitRequestWidget
+          action={hostWorldIdConfig.action}
+          action_description="Verify a human Host before creating a home Listing"
+          allow_legacy_proofs={false}
+          app_id={hostWorldIdConfig.appId}
+          environment={hostWorldIdConfig.environment}
+          handleVerify={verifyHostWorldId}
+          onError={handleWorldIdWidgetError}
+          onOpenChange={setHostWorldIdOpen}
+          onSuccess={() => setHostWorldIdOpen(false)}
+          open={hostWorldIdOpen}
+          preset={proofOfHuman({ signal: DEMO_PROFILES.host.id })}
+          require_user_presence
+          rp_context={hostWorldIdRpContext}
+        />
+      )}
 
       {screen !== 'splash' && (
         <footer className="site-footer">
@@ -734,8 +850,11 @@ function SplashScreen({ apiStatus, onStart }: { apiStatus: ApiStatus; onStart: (
     <section className="splash-screen">
       <div className="splash-copy">
         <NookMark />
-        <p className="quiet-label">Temporary homes · human-backed coordination</p>
-        <h1>Care, kept close.</h1>
+        <p className="quiet-label">P2P sublet marketplace for digital nomads</p>
+        <h1 aria-label="Leave yours in good hands. Find one that feels like home.">
+          <span>Leave yours in good hands.</span>
+          <span>Find one that feels like home.</span>
+        </h1>
         <p className="splash-lede">
           Sublet your place to a verified traveller while you’re away—or find a real home for your
           next 3–90 night stay.
@@ -774,7 +893,7 @@ function RoleScreen({
 }) {
   return (
     <FlowPage
-      eyebrow="Step 1 of 3"
+      eyebrow="Step 1 of 2"
       onBack={onBack}
       subtitle="How would you like to use Nook today?"
       title="A familiar welcome."
@@ -807,70 +926,147 @@ function RoleScreen({
   );
 }
 
-function IdentityScreen({ onBack, onContinue }: { onBack: () => void; onContinue: () => void }) {
+function IdentityScreen({
+  busy,
+  connection,
+  error,
+  hostVerification,
+  onBack,
+  onConnect,
+  onContinue,
+  role,
+}: {
+  busy: boolean;
+  connection: WorldConnection | null;
+  error: NookApiError | null;
+  hostVerification: WorldIdHostVerification | null;
+  onBack: () => void;
+  onConnect: () => void;
+  onContinue: () => void;
+  role: DemoRole;
+}) {
+  const isGuest = role === 'guest';
+
   return (
     <FlowPage
-      eyebrow="Step 2 of 3"
+      eyebrow="Step 2 of 2"
       onBack={onBack}
-      subtitle="Nook uses World to verify that protected Agent actions are backed by a unique human."
-      title="Thoughtful by nature."
+      subtitle={
+        isGuest
+          ? 'Connect the Guest Agent that World has already verified as human-backed.'
+          : 'Prove there is a real person behind the Host profile without sharing personal identity data.'
+      }
+      title={isGuest ? 'Connect with World.' : 'Verify with World ID.'}
     >
       <div className="identity-card">
-        <div className="world-orb" aria-hidden="true">
-          {Array.from({ length: 30 }).map((_, index) => (
-            <span key={index} />
-          ))}
-        </div>
-        <span className="preview-badge">Onboarding preview</span>
-        <h2>Human-backed, without public identity</h2>
+        {isGuest ? (
+          <div className="world-orb" aria-hidden="true">
+            {Array.from({ length: 30 }).map((_, index) => (
+              <span key={index} />
+            ))}
+          </div>
+        ) : (
+          <div className="world-id-mark" aria-hidden="true">
+            <Globe2 size={32} />
+          </div>
+        )}
+        <span className={connection || hostVerification ? 'live-badge' : 'preview-badge'}>
+          {connection
+            ? 'Verification complete'
+            : hostVerification
+              ? 'World ID verified'
+              : isGuest
+                ? 'World AgentKit'
+                : 'World ID · Proof of Human'}
+        </span>
+        <h2>{isGuest ? 'A real human behind the Agent' : 'Human, without the oversharing'}</h2>
         <p>
-          Your passport, face, and World identifier are never shown in a public Listing or Hedera
-          record.
+          {isGuest
+            ? 'World confirms that the Guest Agent is backed by a unique human. The browser never receives its wallet key or World identifier.'
+            : 'Scan the live World ID QR code in World App. Nook stores only a private, action-specific verification—not your name, wallet, or exact address.'}
         </p>
-        <button className="primary-button full-width" type="button" onClick={onContinue}>
-          Continue with demo member <ArrowRight size={17} />
-        </button>
+        <div className="privacy-first">
+          <ShieldCheck size={18} />
+          <span>
+            <strong>Privacy First</strong>
+            <small>Verify eligibility without publishing personal identity data.</small>
+          </span>
+        </div>
+        {isGuest ? (
+          connection ? (
+            <>
+              <div className="verification-badges" role="status">
+                <VerificationBadge
+                  detail="Human-backed"
+                  icon={<CheckCircle2 size={16} />}
+                  label="World verified"
+                />
+                <VerificationBadge
+                  detail={`${connection.onchainSignal.network} · capability active`}
+                  icon={<Network size={16} />}
+                  label="The Graph verified"
+                />
+              </div>
+              <button className="primary-button full-width" type="button" onClick={onContinue}>
+                Continue <ArrowRight size={17} />
+              </button>
+            </>
+          ) : (
+            <button
+              className="primary-button full-width"
+              disabled={busy}
+              type="button"
+              onClick={onConnect}
+            >
+              {busy ? (
+                <>
+                  <LoaderCircle className="spin" size={17} /> Checking World + The Graph
+                </>
+              ) : (
+                <>
+                  Connect World-backed Agent <ArrowRight size={17} />
+                </>
+              )}
+            </button>
+          )
+        ) : hostVerification ? (
+          <>
+            <div className="verification-badges" role="status">
+              <VerificationBadge
+                detail="Private Proof of Human"
+                icon={<CheckCircle2 size={16} />}
+                label="World ID verified"
+              />
+            </div>
+            <button className="primary-button full-width" type="button" onClick={onContinue}>
+              Continue <ArrowRight size={17} />
+            </button>
+          </>
+        ) : (
+          <button
+            className="primary-button full-width"
+            disabled={busy}
+            type="button"
+            onClick={onConnect}
+          >
+            {busy ? (
+              <>
+                <LoaderCircle className="spin" size={17} /> Preparing World ID
+              </>
+            ) : (
+              <>
+                Verify with World ID <ArrowRight size={17} />
+              </>
+            )}
+          </button>
+        )}
       </div>
+      {error && <InlineError error={error} />}
       <BoundaryNote icon={<ShieldCheck size={18} />}>
-        The live World AgentKit proof runs when the Guest Agent requests a protected hold. This
-        preview does not claim that verification already happened.
+        {isGuest
+          ? 'This checks that the Agent is human-backed through World and has an active Nook capability through The Graph. The protected hold checks both again.'
+          : 'World ID proves a unique human completed Host onboarding. The proof is verified by the API and kept separate from public Listing and Hedera data.'}
       </BoundaryNote>
-    </FlowPage>
-  );
-}
-
-function SignalsScreen({ onBack, onContinue }: { onBack: () => void; onContinue: () => void }) {
-  return (
-    <FlowPage
-      eyebrow="Step 3 of 3"
-      onBack={onBack}
-      subtitle="Nook keeps authorization, public onchain signals, and rental history separate."
-      title="Every signal has one job."
-    >
-      <div className="signal-stack">
-        <SignalCard
-          icon={<Globe2 size={22} />}
-          label="World"
-          status="Checked at protected hold"
-          text="Confirms that an Agent acts for a unique human. It does not create Rental Reputation."
-        />
-        <SignalCard
-          icon={<Network size={22} />}
-          label="The Graph"
-          status="Live Agent0 query at hold"
-          text="Confirms active Agent registration and the named Nook.rent booking capability."
-        />
-        <SignalCard
-          demo
-          icon={<BedDouble size={22} />}
-          label="Rental Reputation"
-          status="Demo data for this UI phase"
-          text="Represents verified rental outcomes only. The real HCS projection is the next backend phase."
-        />
-      </div>
-      <button className="primary-button full-width" type="button" onClick={onContinue}>
-        Continue <ArrowRight size={17} />
-      </button>
     </FlowPage>
   );
 }
@@ -910,30 +1106,23 @@ function BoundaryNote({ children, icon }: { children: ReactNode; icon: ReactNode
   );
 }
 
-function SignalCard({
-  demo = false,
+function VerificationBadge({
+  detail,
   icon,
   label,
-  status,
-  text,
 }: {
-  demo?: boolean;
+  detail: string;
   icon: ReactNode;
   label: string;
-  status: string;
-  text: string;
 }) {
   return (
-    <article className="signal-card">
-      <span className="signal-icon">{icon}</span>
-      <div>
-        <div className="signal-title">
-          <strong>{label}</strong>
-          <span className={demo ? 'demo' : ''}>{status}</span>
-        </div>
-        <p>{text}</p>
-      </div>
-    </article>
+    <span className="verification-badge">
+      {icon}
+      <span>
+        <strong>{label}</strong>
+        <small>{detail}</small>
+      </span>
+    </span>
   );
 }
 

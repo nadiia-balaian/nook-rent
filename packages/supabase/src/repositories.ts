@@ -63,6 +63,11 @@ interface ListingApprovalPolicyRow {
   updated_at: Date | string;
 }
 
+interface WorldIdVerificationRow {
+  profile_id: string;
+  nullifier: string;
+}
+
 function mapReputationTier(value: string): RentalReputationTier {
   switch (value) {
     case 'newcomer':
@@ -112,6 +117,97 @@ export class PostgresMemberProfileRepository implements MemberProfileRepositoryP
         role = excluded.role,
         public_ref = excluded.public_ref
     `;
+  }
+}
+
+export interface RecordWorldIdVerificationInput {
+  profileId: string;
+  role: 'host';
+  provider: 'world_id';
+  credential: 'proof_of_human';
+  action: string;
+  environment: 'production' | 'staging' | 'sandbox';
+  protocolVersion: '3.0' | '4.0';
+  nullifierDecimal: string;
+  verifiedAt: string;
+}
+
+export class PostgresWorldIdVerificationRepository {
+  constructor(private readonly sql: PostgresClient) {}
+
+  async isVerified(input: { profileId: string; role: 'host'; action: string }): Promise<boolean> {
+    const [verification] = await this.sql<{ verified: boolean }[]>`
+      select true as verified
+      from nook.world_id_verifications
+      where profile_id = ${input.profileId}
+        and role = ${input.role}
+        and action = ${input.action}
+      limit 1
+    `;
+
+    return verification?.verified === true;
+  }
+
+  async record(input: RecordWorldIdVerificationInput): Promise<'created' | 'idempotent'> {
+    const [profileVerification] = await this.sql<WorldIdVerificationRow[]>`
+      select profile_id, nullifier::text
+      from nook.world_id_verifications
+      where profile_id = ${input.profileId}
+        and role = ${input.role}
+        and action = ${input.action}
+    `;
+
+    if (profileVerification) {
+      if (profileVerification.nullifier === input.nullifierDecimal) {
+        return 'idempotent';
+      }
+
+      throw new DomainConflictError(
+        'world_id_already_bound',
+        'This Host profile is already bound to another World ID verification',
+      );
+    }
+
+    const [humanVerification] = await this.sql<WorldIdVerificationRow[]>`
+      select profile_id, nullifier::text
+      from nook.world_id_verifications
+      where nullifier = ${input.nullifierDecimal}
+        and action = ${input.action}
+    `;
+
+    if (humanVerification && humanVerification.profile_id !== input.profileId) {
+      throw new DomainConflictError(
+        'world_id_already_bound',
+        'This World ID verification is already bound to another Host profile',
+      );
+    }
+
+    await this.sql`
+      insert into nook.world_id_verifications (
+        profile_id,
+        role,
+        provider,
+        credential,
+        action,
+        environment,
+        protocol_version,
+        nullifier,
+        verified_at
+      )
+      values (
+        ${input.profileId},
+        ${input.role},
+        ${input.provider},
+        ${input.credential},
+        ${input.action},
+        ${input.environment},
+        ${input.protocolVersion},
+        ${input.nullifierDecimal},
+        ${input.verifiedAt}
+      )
+    `;
+
+    return 'created';
   }
 }
 

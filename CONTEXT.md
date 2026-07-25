@@ -2,11 +2,11 @@
 
 ## Product statement
 
-Nook.rent is a marketplace for temporary stays of 3 to 90 nights. Human-backed
-agents reduce the work of creating, finding, and booking a stay. Nook.rent keeps
-approval rules explicit, protects scarce dates with reservation holds, secures
-funds in escrow, and turns verified rental behavior into portable Rental
-Reputation.
+Nook.rent is a P2P sublet marketplace for digital nomads, supporting temporary
+stays of 3 to 90 nights. Human-backed agents reduce the work of creating,
+finding, and booking a stay. Nook.rent keeps approval rules explicit, protects
+scarce dates with reservation holds, secures funds in escrow, and turns verified
+rental behavior into portable Rental Reputation.
 
 ## Ubiquitous language
 
@@ -38,6 +38,13 @@ financial parameters from natural-language text.
 
 Proof that an Agent acts for a real, unique person. It controls access to
 protected actions but does not measure rental behavior.
+
+### World ID Host verification
+
+An action-specific Proof of Human completed by a Host during onboarding. It
+confirms uniqueness without revealing the Host's name, wallet, or exact home
+address. It is not Rental Reputation and is separate from Guest Agent
+authorization.
 
 ### Listing
 

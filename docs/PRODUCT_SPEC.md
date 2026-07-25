@@ -141,15 +141,24 @@ infer risk from missing wallet activity.
 
 ## 9. World
 
-World AgentKit provides human-backed authorization for protected Agent actions.
-The integration must be meaningful and end to end:
+World has two deliberately separate responsibilities:
 
+- World ID provides an action-specific Proof of Human before a Host creates a
+  Listing;
+- World AgentKit provides human-backed authorization for protected Guest Agent
+  actions.
+
+The integrations must be meaningful and end to end:
+
+- a Host cannot continue to Listing creation until World ID is verified;
 - an unverified Agent can browse public Listings;
 - an unverified Agent cannot reserve dates or initiate payment;
 - a verified human-backed Agent can request one valid hold;
 - replay and repeated-hold abuse are prevented per anonymous human.
 
-World proof is processed server-side and is not published to HCS.
+World proofs are processed server-side and are not published to HCS. Host World
+ID verification stores only the private action-specific nullifier required to
+prevent reuse; the browser receives only a verified result.
 
 ## 10. The Graph
 

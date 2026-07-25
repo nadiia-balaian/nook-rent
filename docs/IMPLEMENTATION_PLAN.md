@@ -231,10 +231,14 @@ Completed exit evidence:
 
 Estimate: 4–7 focused hours
 
-Status: completed and verified live on 2026-07-25.
+Status: Guest AgentKit completed and verified live on 2026-07-25; Host World
+IDKit implemented locally, with hosted configuration and migration pending.
 
 Implement:
 
+- Host Proof of Human through the real IDKit World App QR flow;
+- server-signed RP context and server-side Host proof verification;
+- private, action-specific Host nullifier persistence;
 - Agent wallet registration flow;
 - AgentKit client for the Guest Agent;
 - protected hold or Booking endpoint;
@@ -244,6 +248,7 @@ Implement:
 
 Exit check:
 
+- Host cannot create a Listing before a valid World ID proof;
 - unverified Agent can browse but cannot hold dates;
 - human-backed Agent can create one valid hold;
 - replay is rejected;
@@ -251,7 +256,15 @@ Exit check:
 
 Local evidence:
 
+- the guided Host UI has no demo bypass and shows Continue only after the API
+  verifies the World ID result;
+- API tests prove safe configuration, server-signed RP context, proof
+  verification, private persistence, and nullifier redaction;
 - the official AgentKit client completes the `402` challenge and signed retry;
+- the two-step guided Guest UI requires live World and The Graph verification
+  badges before continuing;
+- browser-initiated holds are executed by the server-side World-backed Guest
+  Agent without exposing signing material;
 - API tests distinguish missing proof from an unverified Agent;
 - real PostgreSQL tests prove idempotent retry, nonce rejection, and the
   one-active-hold limit;
@@ -440,8 +453,9 @@ Provider access or registration delays may add time.
 
 ## Next coding task
 
-Complete the Phase 8 live smoke test, then prioritize deployment and demo
-hardening. The real Phase 9 projection may follow after the UI tracer is ready:
+Configure and live-test Host World ID, complete the Phase 8 live smoke test,
+then prioritize deployment and demo hardening. The real Phase 9 projection may
+follow after the UI tracer is ready:
 
 ```text
 chore: harden deployed demo flow

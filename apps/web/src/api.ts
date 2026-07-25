@@ -163,6 +163,36 @@ export interface ReservationResult {
   };
 }
 
+export interface WorldConnection {
+  provider: 'world_agentkit';
+  humanBacked: true;
+  network: 'world_chain';
+  onchainSignal: NonNullable<ReservationResult['onchainSignal']>;
+}
+
+export interface WorldIdHostConfig {
+  appId: `app_${string}`;
+  rpId: `rp_${string}`;
+  action: string;
+  environment: 'production' | 'staging' | 'sandbox';
+}
+
+export interface WorldIdRpContext {
+  rp_id: string;
+  nonce: string;
+  created_at: number;
+  expires_at: number;
+  signature: string;
+}
+
+export interface WorldIdHostVerification {
+  provider: 'world_id';
+  credential: 'proof_of_human';
+  humanVerified: true;
+  environment: 'production' | 'staging' | 'sandbox';
+  status: 'created' | 'idempotent';
+}
+
 export interface DepositResult {
   idempotent: boolean;
   operation: {
@@ -320,6 +350,24 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 export const nookApi = {
   readiness: () => request<{ service: string; status: 'ready' }>('/ready'),
 
+  connectWorldAgent: () =>
+    request<WorldConnection>('/v1/agents/guest/world-connection', {
+      method: 'POST',
+    }),
+
+  hostWorldIdConfig: () => request<WorldIdHostConfig>('/v1/world-id/host/config'),
+
+  createHostWorldIdRpContext: () =>
+    request<WorldIdRpContext>('/v1/world-id/host/rp-signature', {
+      method: 'POST',
+    }),
+
+  verifyHostWorldId: (input: { profileId: string; proof: unknown }) =>
+    request<WorldIdHostVerification>('/v1/world-id/host/verify', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
   createHostAgentDraft: (input: {
     hostFacts: {
       city: string;
@@ -373,7 +421,7 @@ export const nookApi = {
     }),
 
   requestReservation: (input: { quoteId: string; idempotencyKey: string }) =>
-    request<ReservationResult>('/v1/reservation-holds', {
+    request<ReservationResult>('/v1/agents/guest/reservation-holds', {
       method: 'POST',
       headers: {
         'idempotency-key': input.idempotencyKey,

@@ -39,6 +39,7 @@ The deposit Operation suite additionally proves:
 Other provider adapters use controlled fakes that match captured, redacted
 schemas:
 
+- World ID Host proof validation and provider failures;
 - World verification outcomes and nonce behavior;
 - Graph Agent0 query mapping and provider failures;
 - Hedera submission and Mirror Node reconciliation;
@@ -57,6 +58,7 @@ failure.
 Explicitly authorized checks for:
 
 - applying migrations to hosted Supabase;
+- World ID Host verification through World App;
 - World registration and protected requests;
 - live Graph gateway query;
 - Hedera Testnet HTS transfer;
@@ -70,6 +72,7 @@ Hosted tests must be opt-in and use isolated demo resources.
 Exercise the deployed web and API:
 
 - Host creates and publishes a Listing;
+- Host must complete World ID Proof of Human before Listing creation;
 - Guest searches and accepts a quote;
 - unverified Agent is denied;
 - verified Agent creates a hold;
@@ -86,8 +89,10 @@ automatic approval, Host review, Host decision, idempotent retry, and
 conflicting-date rejection.
 
 The Phase 4 browser-component suite exercises the guided onboarding and role
-selection, Guest search and quote presentation, automatic approval, Newcomer
-Host review, the explicit Host decision handoff, Host Agent
+selection, required World ID Host verification, required World-backed Guest
+Agent and Agent0 capability verification, compact verification badges, Guest
+search and quote presentation, automatic approval,
+Newcomer Host review, the explicit Host decision handoff, Host Agent
 review-before-publish, deposit confirmation, and HTS/HCS evidence links. Manual
 visual QA additionally covers the desktop and 390px mobile layouts using the
 real local API with OpenAI disabled so deterministic fallback is visible.
@@ -103,14 +108,24 @@ confirmation, HCS sequence read-back, exact token balance movement, and a retry
 with no second submission. Public identifiers and explorer links are recorded
 in [HEDERA_TESTNET.md](./HEDERA_TESTNET.md).
 
-The Phase 6 local suite uses the official AgentKit client to prove the `402`
-challenge and signed retry protocol. Controlled verifier dependencies cover
+The Phase 6 local suite uses the official AgentKit client to prove the live
+AgentBook connection boundary plus the `402` challenge and signed retry
+protocol. API and browser tests prove that the UI cannot continue after failed
+World or Agent0 capability verification and that Reservation Holds are routed
+through the server-side Agent client. Controlled verifier dependencies cover
 invalid and unverified Agent outcomes without sending World proofs over the
-network. The real PostgreSQL suite atomically verifies nonce replay rejection,
-one active Hold per anonymous human, Agent binding, and idempotent retry. These
+network.
+The real PostgreSQL suite atomically verifies nonce replay rejection, one
+active Hold per anonymous human, Agent binding, and idempotent retry. These
 tests prove application behavior. The opt-in live exit run additionally proved
 Agent registration, AgentBook lookup on World Chain, protected Hold creation,
 fresh-nonce idempotent retry, and rejection of a second concurrent Hold.
+
+The Host World ID suite verifies profile-bound proofs, safe public
+configuration, signed RP contexts, provider rejection, and browser gating with
+controlled dependencies. It does not count as live World evidence until the
+Developer Portal configuration is installed, the hosted migration is applied,
+and a World App proof succeeds end to end.
 
 The Phase 7 adapter suite verifies the exact Agent0 response mapping, wallet
 binding, named capability extraction, cache behavior, absent registrations,
@@ -137,6 +152,7 @@ tracer. These controlled tests do not count as a paid live OpenAI check.
 - overlapping hold;
 - duplicate idempotency key with different payload;
 - World proof replay;
+- Host World ID reused for another profile;
 - Agent wallet does not match the Graph registration;
 - Graph provider unavailable;
 - AI invents an unsupported amenity;

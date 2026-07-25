@@ -17,6 +17,10 @@ live OpenAI smoke evidence pending
 ```mermaid
 flowchart LR
   Browser["Web application"] --> API["Fastify API"]
+  Browser --> WorldID["World IDKit"]
+  API --> WorldID
+  API --> GuestAgent["Server-side Guest Agent"]
+  GuestAgent --> API
   API --> Core["Core application services"]
   Worker["Worker and reconciler"] --> Core
 
@@ -68,7 +72,10 @@ authorization decisions.
 ### `apps/api`
 
 Authenticates requests, validates HTTP input, calls application services, and
-returns public read models. It is a composition root for provider adapters.
+returns public read models. It is a composition root for provider adapters. For
+the guided demo it also exposes a narrow bridge to the server-side Guest Agent,
+so the browser can request a protected action without receiving Agent signing
+material.
 
 ### `apps/worker`
 
@@ -119,7 +126,8 @@ Owns idempotency and recovery for an external financial or evidence write.
 | Profiles, Listings, availability, and Booking metadata | Supabase                                          |
 | Approval Policy and result                             | Stored Nook.rent policy evaluation                |
 | Reservation Hold conflicts and expiry                  | Supabase transaction                              |
-| Human-backed Agent authorization                       | World verification result                         |
+| Host Proof of Human                                    | World ID verification result                      |
+| Human-backed Guest Agent authorization                 | World AgentKit verification result                |
 | Agent registration and named Onchain Signals           | Live Graph provider response                      |
 | Financial transaction outcome                          | Hedera consensus record via Mirror Node           |
 | Public rental event history                            | HCS via Mirror Node                               |
@@ -210,9 +218,18 @@ financial authority.
 
 ## World architecture
 
-- The Agent signs protected requests with its registered wallet.
+- The Host onboarding screen opens the real IDKit World App QR flow.
+- The API creates the signed RP context and keeps its signing key server-side.
+- World verifies the profile-bound Proof of Human on the API.
+- Supabase stores the action-specific nullifier privately to prevent reuse.
+- The Guest onboarding screen performs live AgentBook and Agent0 capability
+  checks, then shows only compact verified badges.
+- The browser asks the server-side Guest Agent to perform the protected action.
+- The Agent signs the AgentKit challenge with its registered wallet.
 - World AgentKit resolves whether that Agent is human-backed.
 - Anonymous human identifiers and nonces are stored server-side only.
+- The browser receives no Agent address, wallet key, signed header, World
+  identifier, or nonce.
 - Per-human hold limits prevent one person from blocking multiple Listings.
 - World verification does not change Rental Reputation.
 
@@ -224,6 +241,8 @@ financial authority.
   operator.
 - Require an active registration advertising
   `nook.rent:reservation-hold` before creating a protected hold.
+- Check the same registration during Guest onboarding so the browser can show a
+  truthful verified state before continuing.
 - Normalize provider responses into explicit Onchain Signal values.
 - Fail closed for protected Agent registration checks.
 - Cache the normalized result briefly; never cache past the configured expiry.
@@ -268,8 +287,10 @@ model, not a production custody design.
 - Nook.rent tables must not depend on unrelated application tables.
 
 The schema and repositories are implemented and tested against local
-PostgreSQL. The first five migrations, including the World authorization and
-idempotent-retry changes, are applied to the isolated hosted `nook` schema.
+PostgreSQL. The first five migrations, including the World AgentKit
+authorization and idempotent-retry changes, are applied to the isolated hosted
+`nook` schema. The sixth migration for private Host World ID verification is
+implemented locally and pending an explicit hosted apply.
 
 ## Deployment shape
 

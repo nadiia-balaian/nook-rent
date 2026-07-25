@@ -4,11 +4,39 @@ import {
   OnchainSignalProviderError,
   TokenAmount,
 } from '@nook-rent/core';
+import { WorldIdVerificationError } from '@nook-rent/world';
 
 import { createApi } from '../src/api.js';
 
 const applications: ReturnType<typeof createApi>[] = [];
 const worldResourceUri = 'https://api.nook.rent/v1/reservation-holds';
+const hostProfileId = '10000000-0000-4000-8000-000000000001';
+
+function verifiedHostWorldId() {
+  return {
+    publicConfig: () => ({
+      appId: 'app_nook_test' as const,
+      rpId: 'rp_nook_test' as const,
+      action: 'nook-host-onboarding',
+      environment: 'staging' as const,
+    }),
+    createRpContext: () => ({
+      rp_id: 'rp_nook_test',
+      nonce: 'world-id-request-nonce',
+      created_at: 1_784_990_000,
+      expires_at: 1_784_990_300,
+      signature: `0x${'a'.repeat(130)}`,
+    }),
+    verifyProof: () =>
+      Promise.resolve({
+        provider: 'world_id' as const,
+        credential: 'proof_of_human' as const,
+        environment: 'staging' as const,
+        nullifierDecimal: '42',
+        protocolVersion: '4.0' as const,
+      }),
+  };
+}
 
 function verifiedWorldAuthorization() {
   return {
@@ -78,6 +106,167 @@ describe('Nook API', () => {
       },
     });
     expect(response.json().error.requestId).toBeTypeOf('string');
+  });
+
+  it('returns only safe World ID Host configuration and a signed RP context', async () => {
+    const hostWorldId = verifiedHostWorldId();
+    const application = createApi({
+      hostWorldId,
+      worldIdVerifications: {
+        isVerified: () => Promise.resolve(true),
+        record: () => Promise.resolve('created'),
+      },
+    });
+    applications.push(application);
+
+    const config = await application.inject({
+      method: 'GET',
+      url: '/v1/world-id/host/config',
+    });
+    const rpContext = await application.inject({
+      method: 'POST',
+      url: '/v1/world-id/host/rp-signature',
+    });
+
+    expect(config.statusCode).toBe(200);
+    expect(config.json()).toEqual(hostWorldId.publicConfig());
+    expect(rpContext.statusCode).toBe(200);
+    expect(rpContext.json()).toMatchObject({
+      rp_id: 'rp_nook_test',
+      nonce: 'world-id-request-nonce',
+      signature: expect.stringMatching(/^0x/),
+    });
+    expect(JSON.stringify(config.json())).not.toContain('signing');
+  });
+
+  it('verifies and stores a profile-bound World ID Host proof without exposing its nullifier', async () => {
+    let stored: { profileId: string; nullifierDecimal: string } | undefined;
+    const application = createApi({
+      hostWorldId: verifiedHostWorldId(),
+      worldIdVerifications: {
+        isVerified: () => Promise.resolve(true),
+        record: (input) => {
+          stored = {
+            profileId: input.profileId,
+            nullifierDecimal: input.nullifierDecimal,
+          };
+          return Promise.resolve('created');
+        },
+      },
+    });
+    applications.push(application);
+
+    const response = await application.inject({
+      method: 'POST',
+      url: '/v1/world-id/host/verify',
+      payload: {
+        profileId: hostProfileId,
+        proof: {
+          protocol_version: '4.0',
+          responses: [],
+        },
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      provider: 'world_id',
+      credential: 'proof_of_human',
+      humanVerified: true,
+      environment: 'staging',
+      status: 'created',
+    });
+    expect(stored).toEqual({
+      profileId: hostProfileId,
+      nullifierDecimal: '42',
+    });
+    expect(JSON.stringify(response.json())).not.toContain('nullifier');
+  });
+
+  it('fails closed when World ID rejects the Host proof', async () => {
+    const application = createApi({
+      hostWorldId: {
+        ...verifiedHostWorldId(),
+        verifyProof: () =>
+          Promise.reject(
+            new WorldIdVerificationError(
+              'invalid_world_id_proof',
+              'World ID could not verify this proof',
+            ),
+          ),
+      },
+      worldIdVerifications: {
+        isVerified: () => Promise.resolve(true),
+        record: () => Promise.reject(new Error('must not persist')),
+      },
+    });
+    applications.push(application);
+
+    const response = await application.inject({
+      method: 'POST',
+      url: '/v1/world-id/host/verify',
+      payload: {
+        profileId: hostProfileId,
+        proof: {
+          protocol_version: '4.0',
+          responses: [],
+        },
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({
+      error: {
+        code: 'invalid_world_id_proof',
+      },
+    });
+  });
+
+  it('requires World ID verification before a configured Host can create a Listing', async () => {
+    const application = createApi({
+      hostWorldId: verifiedHostWorldId(),
+      worldIdVerifications: {
+        isVerified: () => Promise.resolve(false),
+        record: () => Promise.reject(new Error('unused')),
+      },
+    });
+    applications.push(application);
+
+    const response = await application.inject({
+      method: 'POST',
+      url: '/v1/listings',
+      payload: {
+        hostProfileId,
+        title: 'A verified home',
+        description: 'A calm temporary home in Lisbon.',
+        city: 'Lisbon',
+        neighborhood: 'Graça',
+        approximateLocationRef: 'lisbon-graca-demo-area',
+        amenities: ['wifi'],
+        houseRules: ['No smoking'],
+        settlementTokenId: '0.0.12345',
+        nightlyRateAtomic: '11000',
+        baseDepositAtomic: '50000',
+        maxGuests: 2,
+        availability: [
+          {
+            checkIn: '2026-09-05',
+            checkOut: '2026-09-15',
+          },
+        ],
+        approvalPolicy: {
+          automaticApprovalEnabled: true,
+          minimumRentalReputationTier: 'silver',
+        },
+      },
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toMatchObject({
+      error: {
+        code: 'world_id_verification_required',
+      },
+    });
   });
 
   it('keeps the Hedera deposit route unavailable until the provider is configured', async () => {
@@ -318,6 +507,121 @@ describe('Nook API', () => {
             nonce: 'challenge-nonce',
           },
         },
+      },
+    });
+  });
+
+  it('connects the configured human-backed Guest Agent without exposing identity details', async () => {
+    const application = createApi({
+      worldGuestAgent: {
+        getAgentAddress: () => '0x1111111111111111111111111111111111111111',
+        getConnectionStatus: () =>
+          Promise.resolve({
+            provider: 'world_agentkit',
+            humanBacked: true,
+            network: 'world_chain',
+          }),
+        createReservationHold: () => Promise.reject(new Error('unused')),
+      },
+      agentRegistrationSignals: {
+        getAgentRegistration: (agentAddress) =>
+          Promise.resolve({
+            active: true,
+            agentAddress,
+            operatorAddresses: [],
+            capabilities: ['nook.rent:reservation-hold'],
+            sourceRef: 'the-graph:agent0:base-sepolia:test-subgraph',
+            chainId: 84_532,
+            subgraphId: 'test-subgraph',
+            network: 'base-sepolia',
+            binding: 'agent_wallet',
+          }),
+      },
+      requiredAgentCapability: 'nook.rent:reservation-hold',
+    });
+    applications.push(application);
+
+    const response = await application.inject({
+      method: 'POST',
+      url: '/v1/agents/guest/world-connection',
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      provider: 'world_agentkit',
+      humanBacked: true,
+      network: 'world_chain',
+      onchainSignal: {
+        provider: 'the_graph',
+        subgraph: 'agent0',
+        network: 'base-sepolia',
+        chainId: 84_532,
+        subgraphId: 'test-subgraph',
+        sourceRef: 'the-graph:agent0:base-sepolia:test-subgraph',
+        registered: true,
+        active: true,
+        binding: 'agent_wallet',
+        requiredCapability: 'nook.rent:reservation-hold',
+        capabilityPresent: true,
+      },
+    });
+    expect(JSON.stringify(response.json())).not.toContain('address');
+    expect(JSON.stringify(response.json())).not.toContain('humanId');
+  });
+
+  it('routes the browser request through the World-backed Guest Agent', async () => {
+    let received:
+      | {
+          quoteId: string;
+          idempotencyKey: string;
+        }
+      | undefined;
+    const application = createApi({
+      worldGuestAgent: {
+        getAgentAddress: () => '0x1111111111111111111111111111111111111111',
+        getConnectionStatus: () => Promise.reject(new Error('unused')),
+        createReservationHold: (input) => {
+          received = input;
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({
+                status: 'created',
+                authorization: {
+                  provider: 'world_agentkit',
+                  humanBacked: true,
+                },
+              }),
+              {
+                status: 201,
+                headers: { 'content-type': 'application/json' },
+              },
+            ),
+          );
+        },
+      },
+    });
+    applications.push(application);
+
+    const response = await application.inject({
+      method: 'POST',
+      url: '/v1/agents/guest/reservation-holds',
+      headers: {
+        'idempotency-key': 'world-ui-agent-request',
+      },
+      payload: {
+        quoteId: '40000000-0000-4000-8000-000000000001',
+      },
+    });
+
+    expect(response.statusCode).toBe(201);
+    expect(received).toEqual({
+      quoteId: '40000000-0000-4000-8000-000000000001',
+      idempotencyKey: 'world-ui-agent-request',
+    });
+    expect(response.json()).toMatchObject({
+      authorization: {
+        provider: 'world_agentkit',
+        humanBacked: true,
       },
     });
   });

@@ -26,11 +26,16 @@ import {
   PostgresMemberProfileRepository,
   PostgresRentalReputationRepository,
   PostgresReservationHoldRepository,
+  PostgresWorldIdVerificationRepository,
 } from '@nook-rent/supabase';
 import { Agent0GraphClient, parseOptionalGraphEnvironment } from '@nook-rent/the-graph';
 import {
+  createWorldGuestAgentClient,
+  parseOptionalWorldGuestAgentEnvironment,
+  parseOptionalWorldIdEnvironment,
   parseOptionalWorldVerifierEnvironment,
   WorldAgentkitAuthorization,
+  WorldIdHostVerification,
 } from '@nook-rent/world';
 
 import { createApi } from './api.js';
@@ -68,6 +73,21 @@ const hederaEnvironment = parseOptionalHederaEnvironment(process.env);
 const worldEnvironment = parseOptionalWorldVerifierEnvironment(process.env);
 const humanBackedAuthorization = worldEnvironment
   ? new WorldAgentkitAuthorization(worldEnvironment)
+  : undefined;
+const worldGuestAgentEnvironment = parseOptionalWorldGuestAgentEnvironment(process.env);
+const worldGuestAgent = worldGuestAgentEnvironment
+  ? createWorldGuestAgentClient({
+      privateKey: worldGuestAgentEnvironment.agentWalletPrivateKey,
+      resourceUri: worldGuestAgentEnvironment.resourceUri,
+      ...(worldGuestAgentEnvironment.rpcUrl ? { rpcUrl: worldGuestAgentEnvironment.rpcUrl } : {}),
+    })
+  : undefined;
+const worldIdEnvironment = parseOptionalWorldIdEnvironment(process.env);
+const hostWorldId = worldIdEnvironment
+  ? new WorldIdHostVerification(worldIdEnvironment)
+  : undefined;
+const worldIdVerifications = worldIdEnvironment
+  ? new PostgresWorldIdVerificationRepository(sql)
   : undefined;
 const graphEnvironment = parseOptionalGraphEnvironment(process.env);
 const agentRegistrationSignals = graphEnvironment
@@ -111,6 +131,8 @@ const app = createApi({
         worldResourceUri: worldEnvironment.resourceUri,
       }
     : {}),
+  ...(worldGuestAgent ? { worldGuestAgent } : {}),
+  ...(hostWorldId && worldIdVerifications ? { hostWorldId, worldIdVerifications } : {}),
   ...(agentRegistrationSignals && graphEnvironment
     ? {
         agentRegistrationSignals,
@@ -127,7 +149,7 @@ app.addHook('onClose', async () => {
   await sql.end();
 });
 
-async function start(): Promise<void> {
+async function startServer(): Promise<void> {
   try {
     await app.listen({
       host: serverEnvironment.apiHost,
@@ -140,4 +162,4 @@ async function start(): Promise<void> {
   }
 }
 
-void start();
+void startServer();

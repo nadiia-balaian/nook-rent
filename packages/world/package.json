@@ -15,6 +15,7 @@
   "dependencies": {
     "@nook-rent/core": "workspace:*",
     "@worldcoin/agentkit": "0.2.0",
+    "@worldcoin/idkit-core": "4.2.2",
     "viem": "2.55.8",
     "zod": "4.4.3"
   },

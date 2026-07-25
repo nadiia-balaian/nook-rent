@@ -1,8 +1,8 @@
 # Nook.rent
 
-Nook.rent is a marketplace for trusted temporary stays. Human-backed agents help
-hosts create listings and help guests find suitable homes, while transparent
-booking rules protect availability, approval, and payment.
+Nook.rent is a P2P sublet marketplace for digital nomads. Human-backed agents
+help hosts create listings and help guests find suitable homes, while
+transparent booking rules protect availability, approval, and payment.
 
 The hackathon product supports stays from **3 to 90 nights** with nightly pricing,
 real Testnet settlement evidence, and two approval paths:
@@ -14,6 +14,7 @@ real Testnet settlement evidence, and two approval paths:
 
 ```text
 host describes a home
+  -> Host completes private World ID Proof of Human
   -> host agent prepares a listing
   -> host confirms price, dates, and approval policy
   -> guest agent searches available listings
@@ -30,8 +31,8 @@ host describes a home
 
 - **Hedera:** real Testnet escrow, booking payment, scheduled operations, HCS
   evidence, and Mirror Node verification.
-- **World:** human-backed agent authorization before scarce dates or funds can be
-  controlled.
+- **World:** private Host Proof of Human during onboarding and human-backed Guest
+  Agent authorization before scarce dates or funds can be controlled.
 - **The Graph:** live agent registration, wallet binding, capabilities, and
   explicitly selected onchain signals.
 
@@ -80,6 +81,8 @@ ready for one opt-in live smoke test:
 - persistent World nonce replay defense and a one-active-hold-per-human limit;
 - atomic human-backed authorization and Reservation Hold creation;
 - safe browser evidence that reveals no Agent or World identifier.
+- real World IDKit Host onboarding with a live World App QR flow, server-signed
+  RP context, server-side proof verification, and private nullifier storage;
 - direct Agent0 queries through The Graph on Base Sepolia;
 - active registration, signing-wallet/owner/operator binding, and named booking
   capability enforcement;
@@ -99,8 +102,10 @@ ready for one opt-in live smoke test:
   deposit, token, recipient, or an invalid Listing.
 
 The first five database migrations are applied to the isolated `nook` schema in
-hosted Supabase. The pseudonymous demo seed contains three profiles, two Lisbon
-Listings with the Nook.rent HTS token, and their availability windows.
+hosted Supabase. The World ID Host verification migration is implemented
+locally and still needs an explicit hosted apply. The pseudonymous demo seed
+contains three profiles, two Lisbon Listings with the Nook.rent HTS token, and
+their availability windows.
 
 Monorepo layout:
 
@@ -136,7 +141,8 @@ docs/
    resource evidence.
 7. Follow [docs/WORLD_AGENTKIT.md](./docs/WORLD_AGENTKIT.md) for the protected
    Guest Agent flow.
-8. Follow [docs/THE_GRAPH_AGENT0.md](./docs/THE_GRAPH_AGENT0.md) to register and
+8. Follow [docs/WORLD_ID.md](./docs/WORLD_ID.md) for private Host onboarding.
+9. Follow [docs/THE_GRAPH_AGENT0.md](./docs/THE_GRAPH_AGENT0.md) to register and
    verify the same Agent through The Graph.
 
 No credentials or private signing material belong in this repository.
@@ -152,6 +158,9 @@ pnpm dev
 This starts the API and web application together. The API exposes `/health`,
 `/ready`, and the marketplace routes under `/v1`. The web application uses
 `VITE_API_URL`, or `http://localhost:3100` when it is not set.
+
+For the two-project Vercel setup and production environment checklist, follow
+[docs/DEPLOYMENT.md](./docs/DEPLOYMENT.md).
 
 `OPENAI_API_KEY` enables the live constrained Host and Guest Agents.
 `OPENAI_MODEL` defaults to `gpt-5.6-sol`. Without an OpenAI key, the same UI and

@@ -23,6 +23,13 @@ const agentWalletEnvironmentSchema = z.object({
   WORLD_AGENT_WALLET_PRIVATE_KEY: privateKey,
 });
 
+const worldIdEnvironmentSchema = z.object({
+  WORLD_ID_APP_ID: z.string().startsWith('app_'),
+  WORLD_ID_RP_ID: z.string().startsWith('rp_'),
+  WORLD_ID_SIGNING_KEY: privateKey,
+  WORLD_ID_ENVIRONMENT: z.enum(['production', 'staging', 'sandbox']).default('production'),
+});
+
 export interface WorldVerifierEnvironment {
   resourceUri: string;
   humanReferenceSecret: string;
@@ -35,6 +42,13 @@ export interface WorldGuestAgentEnvironment extends WorldVerifierEnvironment {
 
 export interface WorldAgentWalletEnvironment {
   agentWalletPrivateKey: `0x${string}`;
+}
+
+export interface WorldIdEnvironment {
+  appId: `app_${string}`;
+  rpId: `rp_${string}`;
+  signingKey: `0x${string}`;
+  environment: 'production' | 'staging' | 'sandbox';
 }
 
 export function parseOptionalWorldVerifierEnvironment(
@@ -67,6 +81,38 @@ export function parseWorldGuestAgentEnvironment(
     humanReferenceSecret: parsed.WORLD_HUMAN_REFERENCE_SECRET,
     agentWalletPrivateKey: parsed.WORLD_AGENT_WALLET_PRIVATE_KEY as `0x${string}`,
     ...(parsed.WORLD_CHAIN_RPC_URL ? { rpcUrl: parsed.WORLD_CHAIN_RPC_URL } : {}),
+  };
+}
+
+export function parseOptionalWorldGuestAgentEnvironment(
+  environment: Record<string, string | undefined>,
+): WorldGuestAgentEnvironment | undefined {
+  if (!environment.WORLD_AGENT_WALLET_PRIVATE_KEY) {
+    return undefined;
+  }
+
+  return parseWorldGuestAgentEnvironment(environment);
+}
+
+export function parseOptionalWorldIdEnvironment(
+  environment: Record<string, string | undefined>,
+): WorldIdEnvironment | undefined {
+  const hasWorldIdConfiguration = [
+    environment.WORLD_ID_APP_ID,
+    environment.WORLD_ID_RP_ID,
+    environment.WORLD_ID_SIGNING_KEY,
+  ].some(Boolean);
+
+  if (!hasWorldIdConfiguration) {
+    return undefined;
+  }
+
+  const parsed = worldIdEnvironmentSchema.parse(environment);
+  return {
+    appId: parsed.WORLD_ID_APP_ID as `app_${string}`,
+    rpId: parsed.WORLD_ID_RP_ID as `rp_${string}`,
+    signingKey: parsed.WORLD_ID_SIGNING_KEY as `0x${string}`,
+    environment: parsed.WORLD_ID_ENVIRONMENT,
   };
 }
 

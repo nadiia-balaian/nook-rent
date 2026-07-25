@@ -1,12 +1,40 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  parseOptionalWorldGuestAgentEnvironment,
+  parseOptionalWorldIdEnvironment,
   parseOptionalWorldVerifierEnvironment,
   parseWorldAgentWalletEnvironment,
   parseWorldGuestAgentEnvironment,
 } from '../src/environment.js';
 
 describe('World environment', () => {
+  it('keeps the server-side Guest Agent optional when no wallet key is configured', () => {
+    expect(
+      parseOptionalWorldGuestAgentEnvironment({
+        WORLD_AGENTKIT_RESOURCE_URI: 'http://localhost:3100/v1/reservation-holds',
+        WORLD_HUMAN_REFERENCE_SECRET: 'test-only-secret-with-at-least-32-characters',
+      }),
+    ).toBeUndefined();
+  });
+
+  it('keeps World ID optional and requires a complete configuration when enabled', () => {
+    expect(parseOptionalWorldIdEnvironment({})).toBeUndefined();
+    expect(
+      parseOptionalWorldIdEnvironment({
+        WORLD_ID_APP_ID: 'app_nook_test',
+        WORLD_ID_RP_ID: 'rp_nook_test',
+        WORLD_ID_SIGNING_KEY: `0x${'1'.repeat(64)}`,
+        WORLD_ID_ENVIRONMENT: 'staging',
+      }),
+    ).toEqual({
+      appId: 'app_nook_test',
+      rpId: 'rp_nook_test',
+      signingKey: `0x${'1'.repeat(64)}`,
+      environment: 'staging',
+    });
+  });
+
   it('keeps the verifier optional when no World values are present', () => {
     expect(parseOptionalWorldVerifierEnvironment({})).toBeUndefined();
   });

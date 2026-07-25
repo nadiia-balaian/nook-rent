@@ -29,9 +29,21 @@ contains only:
 }
 ```
 
+The guided Guest flow first calls
+`POST /v1/agents/guest/world-connection`. This performs a live AgentBook lookup
+and a live The Graph Agent0 capability check. It returns only safe public
+verification states and network labels. When the Guest later requests dates,
+the browser calls
+`POST /v1/agents/guest/reservation-holds`. The server-side Guest Agent then calls
+the protected Reservation Hold resource through the official AgentKit client,
+handles the `402` challenge, signs it with the server-only Agent wallet, and
+retries. The browser never signs or receives Agent wallet material.
+
 ## Implemented
 
 - official `@worldcoin/agentkit` server and Guest Agent client;
+- explicit UI connection step backed by live AgentBook and Agent0 checks;
+- server-side Guest Agent bridge for the browser demo flow;
 - five-minute World Chain challenge bound to the Reservation Hold URL;
 - signed-message validation and signature verification;
 - AgentBook lookup on World Chain;
@@ -62,8 +74,8 @@ WORLD_AGENT_WALLET_PRIVATE_KEY=<0x-prefixed Agent wallet private key>
 Leave `WORLD_CHAIN_RPC_URL` blank to use the default public World Chain RPC.
 
 The API verifier needs the resource URI and human-reference secret. The Agent
-wallet key belongs only in the Guest Agent runtime or a local demo environment;
-never expose it to the web application.
+wallet key belongs only in the server-side Guest Agent runtime; never expose it
+to the web application or any `VITE_` environment variable.
 
 For the deployed API, `WORLD_AGENTKIT_RESOURCE_URI` must be the exact public
 Reservation Hold URL, for example:
@@ -105,12 +117,14 @@ pnpm world:hold -- \
 
 Expected behavior:
 
-1. the first request receives a `402` AgentKit challenge;
-2. the official AgentKit client signs it and retries automatically;
-3. the API returns `201` with `authorization.humanBacked: true`;
-4. retrying the same idempotency key returns the same Hold;
-5. reusing the proof nonce for a different request is rejected;
-6. the same verified human cannot keep a second active Hold.
+1. the verification screen confirms the configured Agent through AgentBook and
+   checks its Nook capability through The Graph;
+2. the first protected request receives a `402` AgentKit challenge;
+3. the official AgentKit client signs it and retries automatically;
+4. the API returns `201` with `authorization.humanBacked: true`;
+5. retrying the same idempotency key returns the same Hold;
+6. reusing the proof nonce for a different request is rejected;
+7. the same verified human cannot keep a second active Hold.
 
 ## Live exit evidence
 

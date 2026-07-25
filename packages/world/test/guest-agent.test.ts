@@ -6,6 +6,21 @@ import { createWorldGuestAgentClient } from '../src/guest-agent.js';
 const RESOURCE_URI = 'https://api.nook.rent/v1/reservation-holds';
 
 describe('World Guest Agent client', () => {
+  it('reports a live human-backed connection without exposing the AgentBook human identifier', async () => {
+    const client = createWorldGuestAgentClient({
+      privateKey: `0x${'1'.repeat(64)}`,
+      resourceUri: RESOURCE_URI,
+      lookupHuman: () => Promise.resolve('private-world-human-id'),
+    });
+
+    await expect(client.getConnectionStatus()).resolves.toEqual({
+      provider: 'world_agentkit',
+      humanBacked: true,
+      network: 'world_chain',
+    });
+    expect(client.getAgentAddress()).toMatch(/^0x[0-9a-fA-F]{40}$/);
+  });
+
   it('uses AgentKit to sign a 402 challenge and retry the protected request', async () => {
     const challenge = new WorldAgentkitAuthorization(
       {
