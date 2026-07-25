@@ -102,7 +102,7 @@ export interface CreateApiOptions {
   worldResourceUri?: string;
   agentRegistrationSignals?: OnchainSignalPort;
   requiredAgentCapability?: string;
-  walletEvidence?: Pick<WalletEvidenceService, 'createChallenge' | 'verifyPoapCollection'>;
+  walletEvidence?: Pick<WalletEvidenceService, 'createChallenge' | 'verifyWalletEvidence'>;
   readiness?: () => Promise<void>;
 }
 
@@ -240,7 +240,7 @@ const walletChallenge = z
     integrity: z.string().regex(/^0x[a-fA-F0-9]{64}$/),
   })
   .strict();
-const walletPoapBody = z
+const walletEvidenceBody = z
   .object({
     challenge: walletChallenge,
     signature: z.string().regex(/^0x[a-fA-F0-9]+$/),
@@ -610,8 +610,8 @@ export function createApi(options: CreateApiOptions = {}): FastifyInstance {
       .send(options.walletEvidence.createChallenge(input.address));
   });
 
-  app.post('/v1/wallet-verification/poap', async (request, reply) => {
-    const input = walletPoapBody.parse(request.body);
+  app.post('/v1/wallet-verification/evidence', async (request, reply) => {
+    const input = walletEvidenceBody.parse(request.body);
 
     if (!options.walletEvidence) {
       throw new DomainConflictError(
@@ -622,7 +622,7 @@ export function createApi(options: CreateApiOptions = {}): FastifyInstance {
 
     return reply
       .header('cache-control', 'no-store')
-      .send(await options.walletEvidence.verifyPoapCollection(input));
+      .send(await options.walletEvidence.verifyWalletEvidence(input));
   });
 
   app.post('/v1/listings/drafts', async (request) => {

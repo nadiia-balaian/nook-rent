@@ -99,6 +99,8 @@ ready for one opt-in live smoke test:
 - safe browser evidence that never reveals the Graph key, raw response, or
   signing wallet.
 - optional Reown wallet connection with a short-lived read-only signature;
+- server-side ENS ownership reads from The Graph’s official Ethereum Mainnet
+  Subgraph;
 - server-side POAP Compass history reads summarized as named signals, never
   Rental Reputation or approval;
 - constrained Host drafting with inferred fields and unconfirmed suggestions

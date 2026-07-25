@@ -75,7 +75,8 @@ sponsor evidence. It does not hold provider credentials or make financial or
 authorization decisions.
 For optional wallet evidence, Reown exposes only the connected EVM address and a
 read-only message signature to the browser flow. The API validates the
-short-lived signature before querying public POAP history.
+short-lived signature before querying public ENS ownership through The Graph
+and public POAP history through POAP Compass.
 
 ### `apps/api`
 
@@ -261,6 +262,8 @@ financial authority.
 
 - Query a live Graph gateway endpoint using a server-side API key.
 - The baseline uses the Agent0 ERC-8004 Subgraph on Base Sepolia.
+- The consented wallet-evidence path uses the official ENS Subgraph on Ethereum
+  Mainnet and reports indexed names without treating them as reputation.
 - Query the human-backed signing wallet as Agent wallet, registry owner, and
   operator.
 - Require an active registration advertising
@@ -281,7 +284,10 @@ financial authority.
   read-only purpose.
 - The Guest signs the message; no transaction or payment permission is
   requested.
-- The API verifies wallet control before querying POAP Compass GraphQL.
+- The API verifies wallet control before querying The Graph for indexed ENS
+  ownership and POAP Compass for public participation history.
+- Each result names its actual source; POAP Compass data is never presented as
+  The Graph data.
 - The browser receives named POAP counts and at most four recent public items,
   not the provider's complete response.
 - Wallet evidence is not stored by the current demo and never changes Rental

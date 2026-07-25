@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { App } from './App.js';
 import type { BookingQuote, DepositResult, Listing, ReservationResult } from './api.js';
+import { ReownProvider } from './reown.js';
 
 vi.mock('@worldcoin/idkit', () => ({
   proofOfHuman: () => ({ type: 'proof_of_human' }),
@@ -198,6 +199,14 @@ function jsonResponse(body: unknown, status = 200): Response {
     status,
     headers: { 'content-type': 'application/json' },
   });
+}
+
+function renderApp() {
+  return render(
+    <ReownProvider>
+      <App />
+    </ReownProvider>,
+  );
 }
 
 function installMarketplaceApi(
@@ -534,7 +543,7 @@ describe('Nook marketplace demo', () => {
     installMarketplaceApi('automatic');
     const user = userEvent.setup();
 
-    render(<App />);
+    renderApp();
 
     expect(await screen.findByText('Live marketplace connected')).toBeTruthy();
     expect(
@@ -553,7 +562,7 @@ describe('Nook marketplace demo', () => {
     installMarketplaceApi('automatic');
     const user = userEvent.setup();
 
-    render(<App />);
+    renderApp();
 
     await user.click(await screen.findByRole('button', { name: 'Get started' }));
     await user.click(screen.getByRole('button', { name: /I want to rent out my place/ }));
@@ -571,7 +580,7 @@ describe('Nook marketplace demo', () => {
     installMarketplaceApi('automatic');
     const user = userEvent.setup();
 
-    render(<App />);
+    renderApp();
     await enterGuestSearch(user);
 
     await user.click(screen.getByRole('button', { name: 'Find available nooks' }));
@@ -596,7 +605,7 @@ describe('Nook marketplace demo', () => {
     installMarketplaceApi('manual');
     const user = userEvent.setup();
 
-    render(<App />);
+    renderApp();
     await enterGuestSearch(user);
 
     await user.click(screen.getByRole('button', { name: /Jo/ }));
@@ -623,7 +632,7 @@ describe('Nook marketplace demo', () => {
     installMarketplaceApi('automatic', { requireWorldAgent: true });
     const user = userEvent.setup();
 
-    render(<App />);
+    renderApp();
     await user.click(screen.getByRole('button', { name: 'Get started' }));
     await user.click(screen.getByRole('button', { name: /I’m looking for a place/ }));
     await completeMemberWorldId(user);
@@ -639,7 +648,7 @@ describe('Nook marketplace demo', () => {
     installMarketplaceApi('automatic');
     const user = userEvent.setup();
 
-    render(<App />);
+    renderApp();
     await user.click(screen.getByRole('button', { name: 'Get started' }));
     await user.click(screen.getByRole('button', { name: /I’m looking for a place/ }));
 
@@ -657,7 +666,7 @@ describe('Nook marketplace demo', () => {
     installMarketplaceApi('automatic');
     const user = userEvent.setup();
 
-    render(<App />);
+    renderApp();
     await user.click(screen.getByRole('button', { name: 'Get started' }));
     await user.click(screen.getByRole('button', { name: /I want to rent out my place/ }));
 
@@ -673,7 +682,7 @@ describe('Nook marketplace demo', () => {
     installMarketplaceApi('automatic');
     const user = userEvent.setup();
 
-    render(<App />);
+    renderApp();
     await enterHostCreate(user);
 
     await user.click(screen.getByRole('button', { name: 'Ask Host Agent to draft' }));

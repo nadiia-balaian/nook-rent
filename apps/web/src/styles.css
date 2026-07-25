@@ -928,6 +928,50 @@ p {
   margin-top: 10px;
 }
 
+.graph-wallet-signal {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  margin-top: 10px;
+  padding: 10px;
+  color: var(--pine);
+  border: 1px solid rgb(49 92 85 / 13%);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+.graph-wallet-signal > svg {
+  color: var(--clay);
+}
+
+.graph-wallet-signal > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.graph-wallet-signal strong,
+.graph-wallet-signal span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.graph-wallet-signal strong {
+  font-size: 0.76rem;
+}
+
+.graph-wallet-signal span,
+.graph-wallet-signal small {
+  color: var(--muted);
+  font-size: 0.61rem;
+}
+
+.graph-wallet-signal small {
+  text-align: right;
+}
+
 .recent-poap {
   display: flex;
   align-items: center;

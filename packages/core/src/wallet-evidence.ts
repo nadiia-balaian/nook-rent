@@ -21,6 +21,20 @@ export interface PoapCollectionReaderPort {
   listByAddress(address: string): Promise<PoapCollectionHistory>;
 }
 
+export interface EnsNameSignal {
+  provider: 'the_graph';
+  dataset: 'ens';
+  network: 'ethereum';
+  subgraphId: string;
+  sourceRef: string;
+  ownedNames: string[];
+  truncated: boolean;
+}
+
+export interface EnsNameReaderPort {
+  listOwnedNames(address: string): Promise<EnsNameSignal>;
+}
+
 export interface PoapCollectionSignals {
   totalPoaps: number;
   distinctEvents: number;

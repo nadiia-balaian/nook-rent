@@ -143,10 +143,12 @@ tests prove that only safe named Graph evidence is displayed. These are local
 controlled tests and do not count as live Graph evidence.
 
 The optional wallet-evidence suite verifies purpose-bound challenge integrity,
-expiry, address recovery, signature mismatch, POAP pagination, provider failure
-sanitization, and deterministic named-signal summaries. API tests prove the
-complete collection is not returned to the browser. These controlled tests do
-not count as a live Reown or POAP provider check.
+expiry, address recovery, signature mismatch, ENS mapping, POAP pagination,
+provider failure sanitization, and deterministic named-signal summaries. API
+and UI tests prove that The Graph ENS and POAP Compass results remain separately
+named and that complete provider responses are not returned to the browser.
+These controlled tests do not count as a live Reown, The Graph ENS, or POAP
+provider check.
 
 The Phase 8 suite validates OpenAI-shaped Structured Outputs without network
 calls. It proves deterministic fallback, clarification for incomplete Guest
@@ -169,6 +171,7 @@ tracer. These controlled tests do not count as a paid live OpenAI check.
 - Agent wallet does not match the Graph registration;
 - Graph provider unavailable;
 - wallet signature rejected or expired;
+- The Graph ENS provider unavailable;
 - POAP provider unavailable;
 - AI invents an unsupported amenity;
 - AI ranking references a Listing outside deterministic search results;

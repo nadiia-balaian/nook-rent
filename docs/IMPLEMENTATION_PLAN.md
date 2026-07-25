@@ -323,12 +323,13 @@ Completed live exit:
 
 ### Optional consented wallet evidence
 
-Status: implemented locally; live Reown and POAP smoke test pending.
+Status: implemented locally; live Reown, ENS, and POAP smoke test pending.
 
 - connect an optional Guest EVM wallet through Reown;
 - prove wallet control with a short-lived, read-only signed message;
+- query indexed ENS ownership through The Graph server-side;
 - query public POAP Compass history server-side;
-- display named POAP count, distinct-event, and active-year signals;
+- display The Graph ENS and POAP Compass results as separately named signals;
 - keep wallet activity separate from Rental Reputation and approval.
 
 This enhancement is additive. A Guest with no wallet or no POAPs keeps the same

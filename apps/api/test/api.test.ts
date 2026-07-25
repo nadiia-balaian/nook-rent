@@ -102,7 +102,7 @@ describe('Nook API', () => {
     const application = createApi({
       walletEvidence: {
         createChallenge: () => challenge,
-        verifyPoapCollection: () => Promise.reject(new Error('unused')),
+        verifyWalletEvidence: () => Promise.reject(new Error('unused')),
       },
     });
     applications.push(application);
@@ -120,7 +120,7 @@ describe('Nook API', () => {
     expect(response.json()).toEqual(challenge);
   });
 
-  it('returns named POAP signals after wallet control is verified', async () => {
+  it('returns separately named ENS and POAP signals after wallet control is verified', async () => {
     const challenge = {
       address: '0x1111111111111111111111111111111111111111',
       issuedAt: '2026-07-25T10:00:00.000Z',
@@ -147,18 +147,27 @@ describe('Nook API', () => {
       },
       recentPoaps: [],
       truncated: false,
+      theGraph: {
+        provider: 'the_graph' as const,
+        dataset: 'ens' as const,
+        network: 'ethereum' as const,
+        subgraphId: '5XqPmWe6gjyrJtFn9cLy237i4cWw2j9HcUJEXsP5qGtH',
+        sourceRef: 'the-graph:ens:ethereum:5XqPmWe6gjyrJtFn9cLy237i4cWw2j9HcUJEXsP5qGtH',
+        ownedNames: ['nook.eth'],
+        truncated: false,
+      },
     };
     const application = createApi({
       walletEvidence: {
         createChallenge: () => challenge,
-        verifyPoapCollection: () => Promise.resolve(result),
+        verifyWalletEvidence: () => Promise.resolve(result),
       },
     });
     applications.push(application);
 
     const response = await application.inject({
       method: 'POST',
-      url: '/v1/wallet-verification/poap',
+      url: '/v1/wallet-verification/evidence',
       payload: {
         challenge,
         signature: `0x${'b'.repeat(130)}`,

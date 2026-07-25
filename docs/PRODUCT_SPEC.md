@@ -181,15 +181,16 @@ queries a live agent registry to verify:
 - active registration state;
 - advertised Nook.rent booking capability.
 
-Optional consented signals, such as ENS identity, may be displayed by name. They
-do not add Rental Reputation and do not authorize payment by themselves.
+The optional consented wallet flow queries indexed ENS ownership through The
+Graph and displays the result by name. It does not add Rental Reputation and
+does not authorize payment by itself.
 
 After direct Guest verification, the Guest may optionally connect an EVM wallet
 through Reown. Nook.rent issues a short-lived, purpose-bound message and reads
-public POAP participation only after the Guest signs it. The result is displayed
-as named wallet evidence—POAP count, distinct events, and active years—and is
-never converted into Rental Reputation or automatic-approval eligibility.
-Missing wallet history remains neutral.
+public ENS ownership through The Graph plus POAP participation through POAP
+Compass only after the Guest signs it. The results are displayed as separately
+named wallet evidence and are never converted into Rental Reputation or
+automatic-approval eligibility. Missing wallet history remains neutral.
 
 Mocked Graph responses may support local unit tests but never count as sponsor
 evidence.

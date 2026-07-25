@@ -2,6 +2,7 @@ import {
   CheckCircle2,
   History,
   LoaderCircle,
+  Network,
   ShieldCheck,
   Sparkles,
   WalletCards,
@@ -75,7 +76,7 @@ function ConnectedWalletEvidencePanel({
     try {
       const challenge = await nookApi.createWalletChallenge(address);
       const signature = await signMessageAsync({ message: challenge.message });
-      const result = await nookApi.readWalletPoaps({ challenge, signature });
+      const result = await nookApi.readWalletEvidence({ challenge, signature });
       onEvidence(result);
     } catch (error) {
       if (error instanceof NookApiError) {
@@ -103,8 +104,8 @@ function ConnectedWalletEvidencePanel({
       </div>
 
       <p>
-        Connect a wallet and sign a read-only message to show public POAP participation. It never
-        changes your Rental Reputation.
+        Connect a wallet and sign a read-only message to show public ENS names and POAP
+        participation. It never changes your Rental Reputation.
       </p>
 
       {!isConnected || !address ? (
@@ -145,6 +146,21 @@ function ConnectedWalletEvidencePanel({
             </div>
           </div>
 
+          {evidence.theGraph && (
+            <div className="graph-wallet-signal">
+              <Network size={18} />
+              <div>
+                <strong>{evidence.theGraph.ownedNames[0] ?? 'No ENS name found'}</strong>
+                <span>
+                  {evidence.theGraph.ownedNames.length > 0
+                    ? `${evidence.theGraph.ownedNames.length}${evidence.theGraph.truncated ? '+' : ''} indexed name${evidence.theGraph.ownedNames.length === 1 ? '' : 's'}`
+                    : 'Wallet checked on Ethereum'}
+                </span>
+              </div>
+              <small>The Graph · ENS mainnet</small>
+            </div>
+          )}
+
           {evidence.recentPoaps.length > 0 && (
             <div className="recent-poaps">
               {evidence.recentPoaps.map((poap) => (
@@ -162,7 +178,11 @@ function ConnectedWalletEvidencePanel({
             </div>
           )}
 
-          <small className="wallet-source">Wallet control verified · POAP Compass</small>
+          <small className="wallet-source">
+            {evidence.theGraph
+              ? 'Live sources · The Graph ENS · POAP Compass'
+              : 'Live source · POAP Compass'}
+          </small>
         </>
       ) : (
         <>
@@ -185,11 +205,11 @@ function ConnectedWalletEvidencePanel({
           >
             {busy ? (
               <>
-                <LoaderCircle className="spin" size={17} /> Reading POAP history
+                <LoaderCircle className="spin" size={17} /> Reading wallet signals
               </>
             ) : (
               <>
-                Verify wallet &amp; read POAPs <ShieldCheck size={17} />
+                Verify wallet &amp; read signals <ShieldCheck size={17} />
               </>
             )}
           </button>

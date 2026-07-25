@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 export const BASE_SEPOLIA_AGENT0_SUBGRAPH_ID = '4yYAvQLFjBhBtdRCY7eUWo181VNoTSLLFd5M7FXQAi6u';
+export const ETHEREUM_MAINNET_ENS_SUBGRAPH_ID = '5XqPmWe6gjyrJtFn9cLy237i4cWw2j9HcUJEXsP5qGtH';
 export const BASE_SEPOLIA_AGENT0_IDENTITY_REGISTRY = '0x8004A818BFB912233c491871b3d84c89A494BD9e';
 export const DEFAULT_AGENT_CAPABILITY = 'nook.rent:reservation-hold';
 export const AGENT0_REGISTRATION_CONFIRMATION = 'register-nook-agent-base-sepolia';
@@ -16,6 +17,11 @@ const graphEnvironmentSchema = z.object({
     .string()
     .trim()
     .regex(/^[A-Za-z0-9]{20,80}$/),
+  THE_GRAPH_ENS_SUBGRAPH_ID: z
+    .string()
+    .trim()
+    .regex(/^[A-Za-z0-9]{20,80}$/)
+    .default(ETHEREUM_MAINNET_ENS_SUBGRAPH_ID),
   THE_GRAPH_AGENT0_CHAIN_ID: z.coerce.number().int().positive().default(84_532),
   THE_GRAPH_REQUIRED_CAPABILITY: z.string().trim().min(3).default(DEFAULT_AGENT_CAPABILITY),
   THE_GRAPH_GATEWAY_URL: optionalUrl,
@@ -41,6 +47,7 @@ const agent0RegistrationEnvironmentSchema = z.object({
 export interface GraphEnvironment {
   apiKey: string;
   subgraphId: string;
+  ensSubgraphId: string;
   chainId: number;
   network: string;
   requiredCapability: string;
@@ -87,6 +94,7 @@ export function parseOptionalGraphEnvironment(
   return {
     apiKey: parsed.THE_GRAPH_API_KEY,
     subgraphId: parsed.THE_GRAPH_AGENT0_SUBGRAPH_ID,
+    ensSubgraphId: parsed.THE_GRAPH_ENS_SUBGRAPH_ID,
     chainId: parsed.THE_GRAPH_AGENT0_CHAIN_ID,
     network: graphNetworkName(parsed.THE_GRAPH_AGENT0_CHAIN_ID),
     requiredCapability: parsed.THE_GRAPH_REQUIRED_CAPABILITY.toLowerCase(),

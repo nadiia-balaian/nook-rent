@@ -235,6 +235,15 @@ export interface WalletEvidence {
     imageUrl?: string;
   }>;
   truncated: boolean;
+  theGraph?: {
+    provider: 'the_graph';
+    dataset: 'ens';
+    network: 'ethereum';
+    subgraphId: string;
+    sourceRef: string;
+    ownedNames: string[];
+    truncated: boolean;
+  };
 }
 
 export interface DepositResult {
@@ -427,8 +436,8 @@ export const nookApi = {
       body: JSON.stringify({ address }),
     }),
 
-  readWalletPoaps: (input: { challenge: WalletChallenge; signature: string }) =>
-    request<WalletEvidence>('/v1/wallet-verification/poap', {
+  readWalletEvidence: (input: { challenge: WalletChallenge; signature: string }) =>
+    request<WalletEvidence>('/v1/wallet-verification/evidence', {
       method: 'POST',
       body: JSON.stringify(input),
     }),

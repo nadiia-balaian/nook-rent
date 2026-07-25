@@ -4,6 +4,7 @@ import {
   AGENT0_REGISTRATION_CONFIRMATION,
   BASE_SEPOLIA_AGENT0_SUBGRAPH_ID,
   DEFAULT_AGENT_CAPABILITY,
+  ETHEREUM_MAINNET_ENS_SUBGRAPH_ID,
   parseAgent0RegistrationEnvironment,
   parseOptionalGraphEnvironment,
 } from '../src/environment.js';
@@ -37,6 +38,7 @@ describe('The Graph environment', () => {
     ).toEqual({
       apiKey: 'test-key',
       subgraphId: BASE_SEPOLIA_AGENT0_SUBGRAPH_ID,
+      ensSubgraphId: ETHEREUM_MAINNET_ENS_SUBGRAPH_ID,
       chainId: 84_532,
       network: 'base-sepolia',
       requiredCapability: DEFAULT_AGENT_CAPABILITY,

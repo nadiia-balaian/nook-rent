@@ -33,7 +33,11 @@ import {
   parseOptionalPoapEnvironment,
   PoapCompassHistoryReader,
 } from '@nook-rent/poap';
-import { Agent0GraphClient, parseOptionalGraphEnvironment } from '@nook-rent/the-graph';
+import {
+  Agent0GraphClient,
+  EnsGraphClient,
+  parseOptionalGraphEnvironment,
+} from '@nook-rent/the-graph';
 import {
   createWorldGuestAgentClient,
   parseOptionalWorldGuestAgentEnvironment,
@@ -111,6 +115,16 @@ const walletEvidence = poapEnvironment
         secret: poapEnvironment.challengeSecret,
         ttlSeconds: poapEnvironment.challengeTtlSeconds,
       }),
+      ...(graphEnvironment
+        ? {
+            ens: new EnsGraphClient({
+              apiKey: graphEnvironment.apiKey,
+              subgraphId: graphEnvironment.ensSubgraphId,
+              gatewayUrl: graphEnvironment.gatewayUrl,
+              timeoutMs: graphEnvironment.timeoutMs,
+            }),
+          }
+        : {}),
     })
   : undefined;
 const hederaClient = hederaEnvironment ? createHederaClient(hederaEnvironment) : undefined;
