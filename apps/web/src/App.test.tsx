@@ -96,6 +96,10 @@ function reservation(mode: 'automatic' | 'manual'): ReservationResult {
           reason: 'rental_reputation_below_minimum',
         }
       : { status: 'auto_approved' },
+    authorization: {
+      provider: 'world_agentkit',
+      humanBacked: true,
+    },
   };
 }
 
@@ -150,7 +154,10 @@ function jsonResponse(body: unknown, status = 200): Response {
   });
 }
 
-function installMarketplaceApi(mode: 'automatic' | 'manual') {
+function installMarketplaceApi(
+  mode: 'automatic' | 'manual',
+  options: { requireWorldAgent?: boolean } = {},
+) {
   const initialReservation = reservation(mode);
 
   vi.stubGlobal(
@@ -176,6 +183,18 @@ function installMarketplaceApi(mode: 'automatic' | 'manual') {
         );
       }
       if (url.pathname === '/v1/reservation-holds') {
+        if (options.requireWorldAgent) {
+          return Promise.resolve(
+            jsonResponse(
+              {
+                error: 'human_backed_authorization_required',
+                extensions: { agentkit: { challenge: true } },
+              },
+              402,
+            ),
+          );
+        }
+
         return Promise.resolve(jsonResponse(initialReservation));
       }
       if (url.pathname.endsWith('/deposit')) {
@@ -246,6 +265,7 @@ describe('Nook marketplace demo', () => {
 
     await user.click(screen.getByRole('button', { name: 'Reserve these dates' }));
     expect(await screen.findByRole('heading', { name: 'Approved—deposit is next' })).toBeTruthy();
+    expect(screen.getByText('Verified this hold')).toBeTruthy();
 
     await user.click(screen.getByRole('button', { name: 'Fund Testnet deposit' }));
     expect(
@@ -275,5 +295,22 @@ describe('Nook marketplace demo', () => {
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: 'Request approved' })).toBeTruthy();
     });
+  });
+
+  it('explains when the protected hold needs a World-verified Guest Agent', async () => {
+    installMarketplaceApi('automatic', { requireWorldAgent: true });
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await user.click(screen.getByRole('button', { name: 'Show available homes' }));
+    await user.click(await screen.findByRole('button', { name: 'View quote' }));
+    await user.click(await screen.findByRole('button', { name: 'Reserve these dates' }));
+
+    expect(
+      await screen.findByText(
+        'A World-verified Guest Agent must authorize this hold. Use the Guest Agent flow, then try again.',
+      ),
+    ).toBeTruthy();
   });
 });

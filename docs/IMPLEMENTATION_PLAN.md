@@ -220,6 +220,9 @@ Completed exit evidence:
 
 Estimate: 4–7 focused hours
 
+Status: locally implemented on 2026-07-25. Hosted migration, Agent wallet
+registration, and the live World proof remain explicit owner-run actions.
+
 Implement:
 
 - Agent wallet registration flow;
@@ -235,6 +238,14 @@ Exit check:
 - human-backed Agent can create one valid hold;
 - replay is rejected;
 - no World identifier appears in HCS or browser logs.
+
+Local evidence:
+
+- the official AgentKit client completes the `402` challenge and signed retry;
+- API tests distinguish missing proof from an unverified Agent;
+- real PostgreSQL tests prove idempotent retry, nonce rejection, and the
+  one-active-hold limit;
+- the API returns only a boolean human-backed evidence state to the browser.
 
 ## Phase 7: The Graph live Agent signals
 

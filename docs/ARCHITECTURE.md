@@ -250,8 +250,9 @@ model, not a production custody design.
 - Nook.rent tables must not depend on unrelated application tables.
 
 The schema and repositories are implemented and tested against local
-PostgreSQL. The first two migrations are applied to the isolated hosted `nook`
-schema. The Phase 5 Operation migration remains an explicit hosted write.
+PostgreSQL. The first three migrations are applied to the isolated hosted
+`nook` schema. The Phase 6 World authorization migration is locally verified
+and remains an explicit hosted write.
 
 ## Deployment shape
 

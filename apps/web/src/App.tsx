@@ -101,6 +101,18 @@ function friendlyError(error: NookApiError): string {
       return 'This request has already been decided.';
     case 'hedera_unavailable':
       return 'Hedera Testnet is not configured yet. Add the new Nook.rent Testnet resources to the API environment.';
+    case 'human_backed_authorization_required':
+      return 'A World-verified Guest Agent must authorize this hold. Use the Guest Agent flow, then try again.';
+    case 'agent_not_human_backed':
+      return 'World could not confirm that this Agent acts for a verified human.';
+    case 'invalid_agentkit_proof':
+      return 'The World AgentKit authorization is invalid or expired. Ask the Guest Agent to sign a fresh request.';
+    case 'world_nonce_replayed':
+      return 'This World authorization was already used. Ask the Guest Agent to sign a fresh request.';
+    case 'human_active_hold_limit':
+      return 'This verified human already has an active hold. Complete or release it before holding another home.';
+    case 'world_unavailable':
+      return 'World AgentKit is not configured on the API yet.';
     default:
       return error.message || 'Something went wrong. Please try again.';
   }
@@ -401,7 +413,7 @@ export function App() {
           />
         )}
 
-        <EvidencePanel deposit={deposit} />
+        <EvidencePanel deposit={deposit} reservation={reservation} />
       </main>
 
       <footer>
@@ -1363,8 +1375,15 @@ function EmptyState({ icon, title, text }: { icon: ReactNode; title: string; tex
   );
 }
 
-function EvidencePanel({ deposit }: { deposit: DepositResult | null }) {
+function EvidencePanel({
+  deposit,
+  reservation,
+}: {
+  deposit: DepositResult | null;
+  reservation: ReservationResult | null;
+}) {
   const hederaLive = deposit?.operation.status === 'confirmed';
+  const worldVerified = reservation?.authorization?.humanBacked === true;
   const evidence = [
     {
       icon: <Database size={18} />,
@@ -1376,9 +1395,10 @@ function EvidencePanel({ deposit }: { deposit: DepositResult | null }) {
     {
       icon: <Globe2 size={18} />,
       name: 'World',
-      status: 'Phase 6',
-      tone: 'planned',
-      detail: 'Human-backed authorization before protected actions',
+      status: worldVerified ? 'Verified this hold' : 'AgentKit-ready',
+      tone: worldVerified ? 'live' : 'ready',
+      detail:
+        'AgentKit challenge, signed-request verification, AgentBook lookup, nonce replay defense, and one-active-hold limit',
     },
     {
       icon: <Network size={18} />,

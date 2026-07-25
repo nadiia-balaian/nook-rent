@@ -31,3 +31,14 @@ export class DomainConflictError extends Error {
     this.name = 'DomainConflictError';
   }
 }
+
+export class HumanBackedAuthorizationError extends Error {
+  constructor(
+    readonly reason:
+      'invalid_agentkit_proof' | 'agent_not_human_backed' | 'authorization_provider_unavailable',
+    message: string,
+  ) {
+    super(message);
+    this.name = 'HumanBackedAuthorizationError';
+  }
+}

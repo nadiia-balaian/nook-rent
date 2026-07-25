@@ -350,19 +350,52 @@ export class PostgresReservationHoldRepository implements ReservationHoldReposit
   constructor(private readonly sql: PostgresClient) {}
 
   async createActive(input: CreateReservationHoldInput): Promise<CreateReservationHoldResult> {
-    const [row] = await this.sql<CreateHoldRow[]>`
-      select *
-      from nook.create_reservation_hold(
-        ${input.requestId},
-        ${input.listingId}::uuid,
-        ${input.guestProfileId}::uuid,
-        ${input.quoteId}::uuid,
-        ${input.stayRange.checkIn.toString()}::date,
-        ${input.stayRange.checkOut.toString()}::date,
-        ${input.expiresAt}::timestamptz,
-        ${input.now}::timestamptz
-      )
-    `;
+    let row: CreateHoldRow | undefined;
+
+    try {
+      [row] = await this.sql<CreateHoldRow[]>`
+        select *
+        from nook.create_human_backed_reservation_hold(
+          ${input.requestId},
+          ${input.listingId}::uuid,
+          ${input.guestProfileId}::uuid,
+          ${input.quoteId}::uuid,
+          ${input.stayRange.checkIn.toString()}::date,
+          ${input.stayRange.checkOut.toString()}::date,
+          ${input.expiresAt}::timestamptz,
+          ${input.now}::timestamptz,
+          ${input.authorization.provider},
+          ${input.authorization.agentAddress},
+          ${input.authorization.anonymousHumanRefHash},
+          ${input.authorization.nonce}
+        )
+      `;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '';
+
+      if (message.includes('world_nonce_replayed')) {
+        throw new DomainConflictError(
+          'world_nonce_replayed',
+          'This World AgentKit authorization nonce has already been used',
+        );
+      }
+
+      if (message.includes('human_active_hold_limit')) {
+        throw new DomainConflictError(
+          'human_active_hold_limit',
+          'This verified human already has an active Reservation Hold',
+        );
+      }
+
+      if (message.includes('agent_profile_mismatch')) {
+        throw new DomainConflictError(
+          'agent_profile_mismatch',
+          'This Agent wallet is already bound to a different Guest Profile',
+        );
+      }
+
+      throw error;
+    }
 
     if (!row) {
       throw new Error('Reservation Hold function returned no result');

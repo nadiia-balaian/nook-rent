@@ -72,6 +72,7 @@ export interface CreateReservationHoldInput {
   stayRange: StayRange;
   expiresAt: string;
   now: string;
+  authorization: HumanBackedAuthorization;
 }
 
 export type CreateReservationHoldResult =
@@ -99,16 +100,14 @@ export interface BookingRequestRepositoryPort {
 }
 
 export interface HumanBackedAuthorization {
-  verified: boolean;
-  anonymousHumanRef?: string;
+  provider: 'world_agentkit';
+  agentAddress: string;
+  anonymousHumanRefHash: string;
+  nonce: string;
 }
 
 export interface HumanBackedAuthorizationPort {
-  verify(input: {
-    agentAddress: string;
-    signedRequest: string;
-    nonce: string;
-  }): Promise<HumanBackedAuthorization>;
+  verify(input: { header: string; resourceUri: string }): Promise<HumanBackedAuthorization>;
 }
 
 export interface AgentRegistrationSignal {

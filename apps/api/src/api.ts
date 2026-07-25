@@ -2,6 +2,8 @@ import cors from '@fastify/cors';
 import {
   DomainConflictError,
   DomainValidationError,
+  HumanBackedAuthorizationError,
+  type HumanBackedAuthorizationPort,
   InvalidStateTransitionError,
   type Booking,
   type BookingDepositService,
@@ -25,6 +27,10 @@ export interface CreateApiOptions {
   marketplace?: MarketplaceService;
   deposits?: Pick<BookingDepositService, 'fundDeposit' | 'getDeposit' | 'reconcileDeposit'>;
   hederaTopicId?: string;
+  humanBackedAuthorization?: HumanBackedAuthorizationPort & {
+    createChallenge(): object;
+  };
+  worldResourceUri?: string;
   readiness?: () => Promise<void>;
 }
 
@@ -133,6 +139,24 @@ function requireDeposits(
   }
 
   return deposits;
+}
+
+function requireHumanBackedAuthorization(
+  authorization: CreateApiOptions['humanBackedAuthorization'],
+  resourceUri: string | undefined,
+  request: FastifyRequest,
+): {
+  authorization: NonNullable<CreateApiOptions['humanBackedAuthorization']>;
+  resourceUri: string;
+} {
+  if (!authorization || !resourceUri) {
+    throw new DomainConflictError(
+      'world_unavailable',
+      `World AgentKit authorization is unavailable for request ${request.id}`,
+    );
+  }
+
+  return { authorization, resourceUri };
 }
 
 function stayRangeDto(stayRange: StayRange) {
@@ -366,9 +390,39 @@ export function createApi(options: CreateApiOptions = {}): FastifyInstance {
   app.post('/v1/reservation-holds', async (request, reply) => {
     const input = holdBody.parse(request.body);
     const idempotencyKey = z.string().min(8).max(200).parse(request.headers['idempotency-key']);
+    const world = requireHumanBackedAuthorization(
+      options.humanBackedAuthorization,
+      options.worldResourceUri,
+      request,
+    );
+    const agentkitHeader = request.headers.agentkit;
+
+    if (typeof agentkitHeader !== 'string' || agentkitHeader.length === 0) {
+      return reply
+        .header('cache-control', 'no-store')
+        .code(402)
+        .send({
+          x402Version: 2,
+          error: 'human_backed_authorization_required',
+          resource: {
+            url: world.resourceUri,
+            description:
+              'A World-verified human-backed Guest Agent is required to hold scarce dates.',
+            mimeType: 'application/json',
+          },
+          accepts: [],
+          extensions: world.authorization.createChallenge(),
+        });
+    }
+
+    const authorization = await world.authorization.verify({
+      header: agentkitHeader,
+      resourceUri: world.resourceUri,
+    });
     const result = await requireMarketplace(options.marketplace, request).requestReservation({
       requestId: idempotencyKey,
       quoteId: input.quoteId,
+      authorization,
     });
 
     if (result.status === 'conflict') {
@@ -383,6 +437,10 @@ export function createApi(options: CreateApiOptions = {}): FastifyInstance {
       bookingRequest: result.bookingRequest,
       booking: bookingDto(result.booking),
       approval: result.approval,
+      authorization: {
+        provider: 'world_agentkit',
+        humanBacked: true,
+      },
     });
   });
 
@@ -457,6 +515,10 @@ export function createApi(options: CreateApiOptions = {}): FastifyInstance {
 
       if (error instanceof ResourceNotFoundError) {
         return reply.code(404).send(errorEnvelope(request, 'resource_not_found', error.message));
+      }
+
+      if (error instanceof HumanBackedAuthorizationError) {
+        return reply.code(403).send(errorEnvelope(request, error.reason, error.message));
       }
 
       if (error instanceof DomainConflictError || error instanceof InvalidStateTransitionError) {

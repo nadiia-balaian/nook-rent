@@ -24,7 +24,9 @@
     "supabase:seed-demo": "pnpm --filter @nook-rent/supabase supabase:seed-demo",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "pnpm -r --if-present typecheck"
+    "typecheck": "pnpm -r --if-present typecheck",
+    "world:agent-address": "pnpm --filter @nook-rent/world world:agent-address",
+    "world:hold": "pnpm --filter @nook-rent/world world:hold"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

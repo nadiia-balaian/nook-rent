@@ -7,9 +7,18 @@
     ".": "./src/index.ts"
   },
   "scripts": {
+    "test": "vitest run",
+    "world:agent-address": "node --env-file-if-exists=../../.env --import tsx src/address-cli.ts",
+    "world:hold": "node --env-file-if-exists=../../.env --import tsx src/hold-cli.ts",
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
-    "@nook-rent/core": "workspace:*"
+    "@nook-rent/core": "workspace:*",
+    "@worldcoin/agentkit": "0.2.0",
+    "viem": "2.55.8",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "tsx": "4.23.1"
   }
 }

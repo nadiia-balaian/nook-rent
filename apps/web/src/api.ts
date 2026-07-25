@@ -9,6 +9,11 @@ export interface ApiErrorEnvelope {
   };
 }
 
+interface AgentkitChallengeEnvelope {
+  error: 'human_backed_authorization_required';
+  extensions: Record<string, unknown>;
+}
+
 export class NookApiError extends Error {
   constructor(
     readonly code: string,
@@ -139,6 +144,10 @@ export interface ReservationResult {
     status: 'auto_approved' | 'host_review';
     reason?: 'automatic_approval_disabled' | 'rental_reputation_below_minimum';
   };
+  authorization?: {
+    provider: 'world_agentkit';
+    humanBacked: true;
+  };
 }
 
 export interface DepositResult {
@@ -213,14 +222,23 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   });
 
   if (!response.ok) {
-    let body: ApiErrorEnvelope | undefined;
+    let body: ApiErrorEnvelope | AgentkitChallengeEnvelope | undefined;
 
     try {
-      body = (await response.json()) as ApiErrorEnvelope;
+      body = (await response.json()) as ApiErrorEnvelope | AgentkitChallengeEnvelope;
     } catch {
       throw new NookApiError(
         'network_response_error',
         `The Nook API returned ${response.status}`,
+        undefined,
+        response.status,
+      );
+    }
+
+    if (typeof body.error === 'string') {
+      throw new NookApiError(
+        'human_backed_authorization_required',
+        'World AgentKit verification is required for this protected action',
         undefined,
         response.status,
       );

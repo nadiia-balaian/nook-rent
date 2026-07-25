@@ -65,6 +65,17 @@ describeWithDatabase('marketplace API tracer', () => {
       marketplace,
       deposits,
       hederaTopicId: '0.0.8001',
+      humanBackedAuthorization: {
+        createChallenge: () => ({ agentkit: { test: true } }),
+        verify: ({ header }) =>
+          Promise.resolve({
+            provider: 'world_agentkit',
+            agentAddress: `test-agent-${header}`,
+            anonymousHumanRefHash: '1'.repeat(64),
+            nonce: header,
+          }),
+      },
+      worldResourceUri: 'https://api.nook.rent/v1/reservation-holds',
       readiness: async () => {
         await sql`select 1`;
       },
@@ -74,6 +85,7 @@ describeWithDatabase('marketplace API tracer', () => {
   beforeEach(async () => {
     await sql`
       truncate table
+        nook.human_backed_authorizations,
         nook.reputation_projections,
         nook.rental_events,
         nook.payments,
@@ -136,6 +148,7 @@ describeWithDatabase('marketplace API tracer', () => {
       url: '/v1/reservation-holds',
       headers: {
         'idempotency-key': 'api-auto-approval-request',
+        agentkit: 'world-api-auto-approval',
       },
       payload: {
         quoteId: quoteResponse.json().id,
@@ -213,6 +226,7 @@ describeWithDatabase('marketplace API tracer', () => {
       url: '/v1/reservation-holds',
       headers: {
         'idempotency-key': 'api-conflicting-request',
+        agentkit: 'world-api-conflicting',
       },
       payload: {
         quoteId: conflictingQuote.json().id,
@@ -245,6 +259,7 @@ describeWithDatabase('marketplace API tracer', () => {
       url: '/v1/reservation-holds',
       headers: {
         'idempotency-key': 'api-host-review-request',
+        agentkit: 'world-api-host-review',
       },
       payload: {
         quoteId: quoteResponse.json().id,

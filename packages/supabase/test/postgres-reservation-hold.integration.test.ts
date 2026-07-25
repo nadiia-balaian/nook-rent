@@ -21,6 +21,15 @@ const QUOTE_ONE_ID = '40000000-0000-4000-8000-000000000001';
 const QUOTE_TWO_ID = '40000000-0000-4000-8000-000000000002';
 const NOW = '2026-07-25T10:00:00.000Z';
 
+function authorization(nonce: string, human = '1') {
+  return {
+    provider: 'world_agentkit' as const,
+    agentAddress: `0x${human.repeat(40)}`,
+    anonymousHumanRefHash: human.repeat(64),
+    nonce,
+  };
+}
+
 describeWithDatabase('Postgres Reservation Hold repository', () => {
   let sql: PostgresClient;
   let bookingRepository: PostgresBookingRepository;
@@ -40,6 +49,7 @@ describeWithDatabase('Postgres Reservation Hold repository', () => {
   beforeEach(async () => {
     await sql`
       truncate table
+        nook.human_backed_authorizations,
         nook.reputation_projections,
         nook.rental_events,
         nook.payments,
@@ -79,6 +89,7 @@ describeWithDatabase('Postgres Reservation Hold repository', () => {
         stayRange,
         expiresAt: '2026-07-25T10:10:00.000Z',
         now: NOW,
+        authorization: authorization('world-concurrent-one', '1'),
       }),
       repository.createActive({
         requestId: 'request-concurrent-two',
@@ -88,6 +99,7 @@ describeWithDatabase('Postgres Reservation Hold repository', () => {
         stayRange,
         expiresAt: '2026-07-25T10:10:00.000Z',
         now: NOW,
+        authorization: authorization('world-concurrent-two', '2'),
       }),
     ]);
 
@@ -133,6 +145,7 @@ describeWithDatabase('Postgres Reservation Hold repository', () => {
       }),
       expiresAt: '2026-07-25T10:10:00.000Z',
       now: NOW,
+      authorization: authorization('world-idempotent'),
     };
 
     const first = await repository.createActive(input);
@@ -144,6 +157,75 @@ describeWithDatabase('Postgres Reservation Hold repository', () => {
     if (first.status === 'created' && retry.status === 'idempotent') {
       expect(retry.hold.id).toBe(first.hold.id);
     }
+  });
+
+  it('rejects a replayed World AgentKit nonce', async () => {
+    const stayRange = StayRange.fromStrings({
+      checkIn: '2026-08-10',
+      checkOut: '2026-08-15',
+    });
+
+    await repository.createActive({
+      requestId: 'request-world-nonce-first',
+      listingId: LISTING_ID,
+      guestProfileId: GUEST_ONE_ID,
+      quoteId: QUOTE_ONE_ID,
+      stayRange,
+      expiresAt: '2026-07-25T10:10:00.000Z',
+      now: NOW,
+      authorization: authorization('world-replayed-nonce', '1'),
+    });
+
+    await expect(
+      repository.createActive({
+        requestId: 'request-world-nonce-replay',
+        listingId: LISTING_ID,
+        guestProfileId: GUEST_TWO_ID,
+        quoteId: QUOTE_TWO_ID,
+        stayRange,
+        expiresAt: '2026-07-25T10:10:00.000Z',
+        now: NOW,
+        authorization: authorization('world-replayed-nonce', '2'),
+      }),
+    ).rejects.toMatchObject({
+      conflict: 'world_nonce_replayed',
+    });
+  });
+
+  it('allows only one active hold per anonymous verified human', async () => {
+    const stayRange = StayRange.fromStrings({
+      checkIn: '2026-08-10',
+      checkOut: '2026-08-15',
+    });
+
+    await repository.createActive({
+      requestId: 'request-human-limit-first',
+      listingId: LISTING_ID,
+      guestProfileId: GUEST_ONE_ID,
+      quoteId: QUOTE_ONE_ID,
+      stayRange,
+      expiresAt: '2026-07-25T10:10:00.000Z',
+      now: NOW,
+      authorization: authorization('world-human-limit-first', '1'),
+    });
+
+    await expect(
+      repository.createActive({
+        requestId: 'request-human-limit-second',
+        listingId: LISTING_ID,
+        guestProfileId: GUEST_TWO_ID,
+        quoteId: QUOTE_TWO_ID,
+        stayRange,
+        expiresAt: '2026-07-25T10:10:00.000Z',
+        now: NOW,
+        authorization: {
+          ...authorization('world-human-limit-second', '2'),
+          anonymousHumanRefHash: '1'.repeat(64),
+        },
+      }),
+    ).rejects.toMatchObject({
+      conflict: 'human_active_hold_limit',
+    });
   });
 
   it('rejects reuse of one request ID for different Booking terms', async () => {
@@ -161,6 +243,7 @@ describeWithDatabase('Postgres Reservation Hold repository', () => {
       stayRange,
       expiresAt: '2026-07-25T10:10:00.000Z',
       now: NOW,
+      authorization: authorization('world-reused-terms'),
     });
 
     await expect(
@@ -172,6 +255,7 @@ describeWithDatabase('Postgres Reservation Hold repository', () => {
         stayRange,
         expiresAt: '2026-07-25T10:10:00.000Z',
         now: NOW,
+        authorization: authorization('world-reused-terms'),
       }),
     ).rejects.toThrow('idempotency_key_reused');
   });
@@ -189,6 +273,7 @@ describeWithDatabase('Postgres Reservation Hold repository', () => {
       stayRange,
       expiresAt: '2026-07-25T10:10:00.000Z',
       now: NOW,
+      authorization: authorization('world-expiring', '1'),
     });
 
     expect(first.status).toBe('created');
@@ -208,6 +293,7 @@ describeWithDatabase('Postgres Reservation Hold repository', () => {
       stayRange,
       expiresAt: '2026-07-25T10:20:00.000Z',
       now: '2026-07-25T10:11:00.000Z',
+      authorization: authorization('world-after-expiry', '2'),
     });
     expect(replacement.status).toBe('created');
   });
@@ -224,6 +310,7 @@ describeWithDatabase('Postgres Reservation Hold repository', () => {
       }),
       expiresAt: '2026-07-25T10:10:00.000Z',
       now: NOW,
+      authorization: authorization('world-for-booking'),
     });
 
     expect(hold.status).toBe('created');
@@ -270,6 +357,7 @@ describeWithDatabase('Postgres Reservation Hold repository', () => {
       }),
       expiresAt: '2026-07-25T10:10:00.000Z',
       now: NOW,
+      authorization: authorization('world-for-deposit'),
     });
 
     expect(createdHold.status).toBe('created');
@@ -358,7 +446,7 @@ describeWithDatabase('Postgres Reservation Hold repository', () => {
       where schemaname = 'nook'
     `;
 
-    expect(tables).toHaveLength(15);
+    expect(tables).toHaveLength(16);
     expect(tables.every((table) => table.relrowsecurity)).toBe(true);
     expect(policies[0]?.policy_count).toBe(0);
   });

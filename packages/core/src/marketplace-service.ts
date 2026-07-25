@@ -27,6 +27,7 @@ import type {
   ListingRepositoryPort,
   ListingSearch,
   MemberProfileRepositoryPort,
+  HumanBackedAuthorization,
   RentalReputationPort,
   ReservationHoldRepositoryPort,
   StoredListingApprovalPolicy,
@@ -297,6 +298,7 @@ export class MarketplaceService {
   async requestReservation(input: {
     requestId: string;
     quoteId: string;
+    authorization: HumanBackedAuthorization;
   }): Promise<ReservationRequestResult> {
     const quote = await this.dependencies.quotes.getById(input.quoteId);
 
@@ -316,6 +318,7 @@ export class MarketplaceService {
         addMilliseconds(now, HOLD_LIFETIME_MILLISECONDS),
       ),
       now,
+      authorization: input.authorization,
     });
 
     if (holdResult.status === 'conflict') {

@@ -22,6 +22,10 @@ import {
   PostgresRentalReputationRepository,
   PostgresReservationHoldRepository,
 } from '@nook-rent/supabase';
+import {
+  parseOptionalWorldVerifierEnvironment,
+  WorldAgentkitAuthorization,
+} from '@nook-rent/world';
 
 import { createApi } from './api.js';
 
@@ -47,6 +51,10 @@ const marketplace = new MarketplaceService({
   },
 });
 const hederaEnvironment = parseOptionalHederaEnvironment(process.env);
+const worldEnvironment = parseOptionalWorldVerifierEnvironment(process.env);
+const humanBackedAuthorization = worldEnvironment
+  ? new WorldAgentkitAuthorization(worldEnvironment)
+  : undefined;
 const hederaClient = hederaEnvironment ? createHederaClient(hederaEnvironment) : undefined;
 const deposits =
   hederaEnvironment && hederaClient
@@ -78,6 +86,12 @@ const app = createApi({
   marketplace,
   ...(deposits ? { deposits } : {}),
   ...(hederaEnvironment ? { hederaTopicId: hederaEnvironment.topicId.toString() } : {}),
+  ...(humanBackedAuthorization && worldEnvironment
+    ? {
+        humanBackedAuthorization,
+        worldResourceUri: worldEnvironment.resourceUri,
+      }
+    : {}),
   readiness: async () => {
     await sql`select 1`;
   },

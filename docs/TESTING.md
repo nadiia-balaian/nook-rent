@@ -101,6 +101,14 @@ confirmation, HCS sequence read-back, exact token balance movement, and a retry
 with no second submission. Public identifiers and explorer links are recorded
 in [HEDERA_TESTNET.md](./HEDERA_TESTNET.md).
 
+The Phase 6 local suite uses the official AgentKit client to prove the `402`
+challenge and signed retry protocol. Controlled verifier dependencies cover
+invalid and unverified Agent outcomes without sending World proofs over the
+network. The real PostgreSQL suite atomically verifies nonce replay rejection,
+one active Hold per anonymous human, Agent binding, and idempotent retry. These
+tests prove application behavior; the owner-run Agent registration and live
+AgentBook lookup are still required sponsor evidence.
+
 ## Required negative cases
 
 - stay shorter than 3 nights;

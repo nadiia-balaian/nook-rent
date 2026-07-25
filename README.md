@@ -41,8 +41,9 @@ rental behavior.
 
 ## Repository status
 
-Phases 1–5 are implemented. The Hedera tracer has dedicated Testnet resources,
-a hosted Operation schema, and verified live deposit/HCS evidence:
+Phases 1–5 are implemented and the Hedera tracer has verified live evidence.
+Phase 6 World AgentKit authorization is implemented locally; its hosted
+migration, Agent registration, and live proof remain explicit owner-run steps:
 
 - `pnpm` TypeScript monorepo and shared quality gate;
 - Fastify API shell with a tested health endpoint;
@@ -71,10 +72,16 @@ a hosted Operation schema, and verified live deposit/HCS evidence:
 - minimal HCS deposit evidence with Mirror Node read-back;
 - Testnet preflight, deposit API routes, and HashScan links;
 - explicit pending, reconciling, confirmed, and failed deposit UI states.
+- official World AgentKit challenge and signed-retry flow;
+- AgentBook verification with server-only anonymous human-reference hashing;
+- persistent World nonce replay defense and a one-active-hold-per-human limit;
+- atomic human-backed authorization and Reservation Hold creation;
+- safe browser evidence that reveals no Agent or World identifier.
 
-All three database migrations are applied to the isolated `nook` schema in
-hosted Supabase. The pseudonymous demo seed contains three profiles, two Lisbon
-Listings with the Nook.rent HTS token, and their availability windows.
+The first three database migrations are applied to the isolated `nook` schema
+in hosted Supabase. The Phase 6 migration is locally verified and awaits an
+explicit hosted write. The pseudonymous demo seed contains three profiles, two
+Lisbon Listings with the Nook.rent HTS token, and their availability windows.
 
 Monorepo layout:
 
@@ -108,6 +115,8 @@ docs/
    sponsor integration.
 6. Review [docs/HEDERA_TESTNET.md](./docs/HEDERA_TESTNET.md) for public Testnet
    resource evidence.
+7. Follow [docs/WORLD_AGENTKIT.md](./docs/WORLD_AGENTKIT.md) for the protected
+   Guest Agent flow.
 
 No credentials or private signing material belong in this repository.
 
