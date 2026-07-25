@@ -28,6 +28,7 @@ import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest }
 import { z, ZodError } from 'zod';
 
 export interface CreateApiOptions {
+  fastify?: FastifyInstance;
   logger?: boolean;
   allowedOrigins?: string[];
   marketplace?: MarketplaceService;
@@ -467,9 +468,11 @@ function depositDto(result: DepositWorkflowResult, topicId?: string) {
 }
 
 export function createApi(options: CreateApiOptions = {}): FastifyInstance {
-  const app = Fastify({
-    logger: options.logger ?? false,
-  });
+  const app =
+    options.fastify ??
+    Fastify({
+      logger: options.logger ?? false,
+    });
 
   void app.register(cors, {
     origin: options.allowedOrigins?.length ? options.allowedOrigins : false,

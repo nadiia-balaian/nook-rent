@@ -37,6 +37,7 @@ import {
   WorldAgentkitAuthorization,
   WorldIdHostVerification,
 } from '@nook-rent/world';
+import Fastify from 'fastify';
 
 import { createApi } from './api.js';
 
@@ -119,7 +120,9 @@ const deposits =
       })
     : undefined;
 const app = createApi({
-  logger: serverEnvironment.nodeEnvironment !== 'test',
+  fastify: Fastify({
+    logger: serverEnvironment.nodeEnvironment !== 'test',
+  }),
   allowedOrigins: serverEnvironment.allowedOrigins,
   marketplace,
   marketplaceAgents,
