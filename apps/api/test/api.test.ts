@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { HumanBackedAuthorizationError, OnchainSignalProviderError } from '@nook-rent/core';
+import {
+  HumanBackedAuthorizationError,
+  OnchainSignalProviderError,
+  TokenAmount,
+} from '@nook-rent/core';
 
 import { createApi } from '../src/api.js';
 
@@ -92,6 +96,183 @@ describe('Nook API', () => {
     expect(response.json()).toMatchObject({
       error: {
         code: 'hedera_unavailable',
+      },
+    });
+  });
+
+  it('returns a constrained Host Agent draft that still requires confirmation', async () => {
+    const application = createApi({
+      marketplaceAgents: {
+        createListingDraft: () =>
+          Promise.resolve({
+            draft: {
+              title: 'A calm Graça home',
+              description: 'A public description based on confirmed Host facts.',
+              suggestedAmenities: ['workspace'],
+              inferredFields: ['title', 'description', 'suggestedAmenities'],
+            },
+            execution: {
+              provider: 'openai',
+              mode: 'live',
+              model: 'test-model',
+            },
+          }),
+        search: () => Promise.reject(new Error('unused')),
+      },
+    });
+    applications.push(application);
+
+    const response = await application.inject({
+      method: 'POST',
+      url: '/v1/listings/drafts',
+      payload: {
+        hostFacts: {
+          city: 'Lisbon',
+          neighborhood: 'Graça',
+          propertyType: 'one-bedroom home',
+          maxGuests: 2,
+          confirmedAmenities: ['wifi'],
+          houseRules: ['No smoking'],
+          highlights: ['calm courtyard'],
+        },
+        imageRefs: [],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      draft: {
+        title: 'A calm Graça home',
+        suggestedAmenities: ['workspace'],
+      },
+      agent: {
+        provider: 'openai',
+        mode: 'live',
+      },
+      requiresHostConfirmation: true,
+    });
+  });
+
+  it('returns only database-valid Listings from the Guest Agent search', async () => {
+    const application = createApi({
+      marketplaceAgents: {
+        createListingDraft: () => Promise.reject(new Error('unused')),
+        search: () =>
+          Promise.resolve({
+            status: 'ready',
+            interpretation: {
+              status: 'ready',
+              city: 'Lisbon',
+              checkIn: '2026-08-20',
+              checkOut: '2026-08-25',
+              guests: 1,
+              maximumNightlyRateAtomic: '15000',
+              requiredAmenities: ['wifi'],
+            },
+            interpretationExecution: {
+              provider: 'openai',
+              mode: 'live',
+              model: 'test-model',
+            },
+            rankingExecution: {
+              provider: 'deterministic',
+              mode: 'fallback',
+              fallbackReason: 'provider_unavailable',
+            },
+            totalMatches: 1,
+            recommendations: [
+              {
+                listing: {
+                  id: '30000000-0000-4000-8000-000000000001',
+                  hostProfileId: '10000000-0000-4000-8000-000000000001',
+                  title: 'Alfama work-friendly nook',
+                  description: 'A calm room with a desk.',
+                  city: 'Lisbon',
+                  neighborhood: 'Alfama',
+                  approximateLocationRef: 'lisbon-alfama-area',
+                  amenities: ['wifi', 'desk'],
+                  houseRules: ['No smoking'],
+                  settlementTokenId: '0.0.7001',
+                  nightlyRate: TokenAmount.fromAtomicUnits('10000'),
+                  baseDeposit: TokenAmount.fromAtomicUnits('50000'),
+                  maxGuests: 2,
+                  status: 'published',
+                  createdAt: '2026-07-25T10:00:00.000Z',
+                  updatedAt: '2026-07-25T10:00:00.000Z',
+                },
+                summary: 'A valid work-friendly match.',
+                matchReasons: ['Includes wifi'],
+              },
+            ],
+          }),
+      },
+    });
+    applications.push(application);
+
+    const response = await application.inject({
+      method: 'POST',
+      url: '/v1/agents/guest/search',
+      payload: {
+        query:
+          'Find a stay in Lisbon from 2026-08-20 to 2026-08-25 for 1 guest under 15000 with wifi.',
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      status: 'ready',
+      totalMatches: 1,
+      items: [
+        {
+          listing: {
+            id: '30000000-0000-4000-8000-000000000001',
+            nightlyRateAtomic: '10000',
+          },
+          summary: 'A valid work-friendly match.',
+        },
+      ],
+      agent: {
+        interpretation: { provider: 'openai', mode: 'live' },
+        ranking: {
+          provider: 'deterministic',
+          mode: 'fallback',
+          fallbackReason: 'provider_unavailable',
+        },
+      },
+    });
+  });
+
+  it('rejects private or financial fields at the Host Agent boundary', async () => {
+    const application = createApi({
+      marketplaceAgents: {
+        createListingDraft: () => Promise.reject(new Error('must not run')),
+        search: () => Promise.reject(new Error('unused')),
+      },
+    });
+    applications.push(application);
+
+    const response = await application.inject({
+      method: 'POST',
+      url: '/v1/listings/drafts',
+      payload: {
+        hostFacts: {
+          city: 'Lisbon',
+          neighborhood: 'Graça',
+          propertyType: 'home',
+          maxGuests: 2,
+          confirmedAmenities: ['wifi'],
+          houseRules: [],
+          highlights: [],
+          depositAmountAtomic: '1',
+        },
+        imageRefs: [],
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({
+      error: {
+        code: 'validation_error',
       },
     });
   });

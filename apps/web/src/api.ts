@@ -224,6 +224,55 @@ export interface SearchInput {
   amenities: string;
 }
 
+export interface AgentExecution {
+  provider: 'deterministic' | 'openai';
+  mode: 'fallback' | 'live';
+  model?: string;
+  fallbackReason?: 'invalid_output' | 'provider_error' | 'provider_unavailable';
+}
+
+export interface HostAgentDraftResult {
+  draft: {
+    title: string;
+    description: string;
+    suggestedAmenities: string[];
+    inferredFields: Array<'description' | 'suggestedAmenities' | 'title'>;
+  };
+  agent: AgentExecution;
+  requiresHostConfirmation: true;
+}
+
+export type GuestAgentSearchResult =
+  | {
+      status: 'needs_clarification';
+      question: string;
+      agent: {
+        interpretation: AgentExecution;
+      };
+    }
+  | {
+      status: 'ready';
+      interpretation: {
+        status: 'ready';
+        city: string;
+        checkIn: string;
+        checkOut: string;
+        guests: number;
+        maximumNightlyRateAtomic?: string;
+        requiredAmenities: string[];
+      };
+      totalMatches: number;
+      items: Array<{
+        listing: Listing;
+        summary: string;
+        matchReasons: string[];
+      }>;
+      agent: {
+        interpretation: AgentExecution;
+        ranking?: AgentExecution;
+      };
+    };
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...init,
@@ -270,6 +319,29 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const nookApi = {
   readiness: () => request<{ service: string; status: 'ready' }>('/ready'),
+
+  createHostAgentDraft: (input: {
+    hostFacts: {
+      city: string;
+      neighborhood: string;
+      propertyType: string;
+      maxGuests: number;
+      confirmedAmenities: string[];
+      houseRules: string[];
+      highlights: string[];
+    };
+    imageRefs: string[];
+  }) =>
+    request<HostAgentDraftResult>('/v1/listings/drafts', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  searchWithGuestAgent: (query: string) =>
+    request<GuestAgentSearchResult>('/v1/agents/guest/search', {
+      method: 'POST',
+      body: JSON.stringify({ query }),
+    }),
 
   searchListings: (input: SearchInput) => {
     const query = new URLSearchParams({

@@ -13,6 +13,7 @@ import {
   type DepositWorkflowResult,
   type Listing,
   type ListingDetail,
+  type MarketplaceAgentService,
   type MarketplaceService,
   type OnchainSignalPort,
   OnchainSignalProviderError,
@@ -29,6 +30,7 @@ export interface CreateApiOptions {
   logger?: boolean;
   allowedOrigins?: string[];
   marketplace?: MarketplaceService;
+  marketplaceAgents?: Pick<MarketplaceAgentService, 'createListingDraft' | 'search'>;
   deposits?: Pick<BookingDepositService, 'fundDeposit' | 'getDeposit' | 'reconcileDeposit'>;
   hederaTopicId?: string;
   humanBackedAuthorization?: HumanBackedAuthorizationPort & {
@@ -108,6 +110,37 @@ const decisionBody = z.object({
   decision: z.enum(['approved', 'rejected']),
 });
 
+const publicImageRef = z
+  .url()
+  .refine((value) => new URL(value).protocol === 'https:', 'imageRefs must use HTTPS')
+  .refine((value) => {
+    const hostname = new URL(value).hostname.toLowerCase();
+    return hostname !== 'localhost' && hostname !== '127.0.0.1' && hostname !== '::1';
+  }, 'imageRefs must use a public hostname');
+
+const listingAgentDraftBody = z
+  .object({
+    hostFacts: z
+      .object({
+        city: z.string().trim().min(1).max(120),
+        neighborhood: z.string().trim().min(1).max(120),
+        propertyType: z.string().trim().min(1).max(80),
+        maxGuests: z.number().int().min(1).max(100),
+        confirmedAmenities: z.array(z.string().trim().min(1).max(80)).max(40),
+        houseRules: z.array(z.string().trim().min(1).max(300)).max(40),
+        highlights: z.array(z.string().trim().min(1).max(300)).max(12),
+      })
+      .strict(),
+    imageRefs: z.array(publicImageRef).max(4).default([]),
+  })
+  .strict();
+
+const guestAgentSearchBody = z
+  .object({
+    query: z.string().trim().min(3).max(1_000),
+  })
+  .strict();
+
 function errorEnvelope(request: FastifyRequest, code: string, message: string, details?: unknown) {
   return {
     error: {
@@ -145,6 +178,20 @@ function requireDeposits(
   }
 
   return deposits;
+}
+
+function requireMarketplaceAgents(
+  marketplaceAgents: CreateApiOptions['marketplaceAgents'],
+  request: FastifyRequest,
+): NonNullable<CreateApiOptions['marketplaceAgents']> {
+  if (!marketplaceAgents) {
+    throw new DomainConflictError(
+      'agents_unavailable',
+      `Marketplace Agents are unavailable for request ${request.id}`,
+    );
+  }
+
+  return marketplaceAgents;
 }
 
 function requireHumanBackedAuthorization(
@@ -381,6 +428,20 @@ export function createApi(options: CreateApiOptions = {}): FastifyInstance {
     return reply.code(201).send(profile);
   });
 
+  app.post('/v1/listings/drafts', async (request) => {
+    const input = listingAgentDraftBody.parse(request.body);
+    const result = await requireMarketplaceAgents(
+      options.marketplaceAgents,
+      request,
+    ).createListingDraft(input);
+
+    return {
+      draft: result.draft,
+      agent: result.execution,
+      requiresHostConfirmation: true,
+    };
+  });
+
   app.post('/v1/listings', async (request, reply) => {
     const input = listingBody.parse(request.body);
     const detail = await requireMarketplace(options.marketplace, request).createListingDraft({
@@ -422,6 +483,36 @@ export function createApi(options: CreateApiOptions = {}): FastifyInstance {
 
     return {
       items: listings.map(listingDto),
+    };
+  });
+
+  app.post('/v1/agents/guest/search', async (request) => {
+    const input = guestAgentSearchBody.parse(request.body);
+    const result = await requireMarketplaceAgents(options.marketplaceAgents, request).search(input);
+
+    if (result.status === 'needs_clarification') {
+      return {
+        status: result.status,
+        question: result.question,
+        agent: {
+          interpretation: result.interpretationExecution,
+        },
+      };
+    }
+
+    return {
+      status: result.status,
+      interpretation: result.interpretation,
+      totalMatches: result.totalMatches,
+      items: result.recommendations.map((recommendation) => ({
+        listing: listingDto(recommendation.listing),
+        summary: recommendation.summary,
+        matchReasons: recommendation.matchReasons,
+      })),
+      agent: {
+        interpretation: result.interpretationExecution,
+        ranking: result.rankingExecution,
+      },
     };
   });
 

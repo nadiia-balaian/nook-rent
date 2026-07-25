@@ -118,6 +118,14 @@ unavailable, unregistered, inactive, or missing the required capability. UI
 tests prove that only safe named Graph evidence is displayed. These are local
 controlled tests and do not count as live Graph evidence.
 
+The Phase 8 suite validates OpenAI-shaped Structured Outputs without network
+calls. It proves deterministic fallback, clarification for incomplete Guest
+requests, hard filtering before ranking, rejection of invented or duplicated
+Listing IDs, strict rejection of extra financial fields, and rejection of
+financial or private-access claims in generated copy. API and browser-component
+tests cover both the Guest matching tracer and the Host review-before-publish
+tracer. These controlled tests do not count as a paid live OpenAI check.
+
 ## Required negative cases
 
 - stay shorter than 3 nights;
@@ -130,6 +138,8 @@ controlled tests and do not count as live Graph evidence.
 - Agent wallet does not match the Graph registration;
 - Graph provider unavailable;
 - AI invents an unsupported amenity;
+- AI ranking references a Listing outside deterministic search results;
+- AI output attempts to add approval, deposit, token, or access authority;
 - escrow submission timeout;
 - confirmed Hedera transaction after local timeout;
 - duplicate HCS event;

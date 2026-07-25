@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@fastify/cors": "11.3.0",
+    "@nook-rent/ai": "workspace:*",
     "@nook-rent/config": "workspace:*",
     "@nook-rent/core": "workspace:*",
     "@nook-rent/hedera": "workspace:*",

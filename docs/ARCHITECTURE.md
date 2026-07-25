@@ -1,7 +1,7 @@
 # Nook.rent architecture
 
-Status: Phase 7 The Graph gate implemented locally; live Agent0 registration
-and Graph evidence pending
+Status: Phase 8 constrained marketplace Agents implemented locally; live OpenAI
+smoke evidence pending
 
 ## Principles
 
@@ -180,20 +180,31 @@ timed out. Reconciliation decides its final state.
 
 The AI provider receives the minimum input required for one allowed task.
 
+The Phase 8 composition uses the OpenAI Responses API with strict Structured
+Outputs. If OpenAI is absent, unavailable, or returns invalid structured data,
+the same core ports fall back to deterministic drafting, interpretation, and
+ranking with the fallback state visible in the API and UI.
+
 ### Listing draft
 
-Host facts and approved photos are transformed into a structured draft.
-Inferences remain marked until Host confirmation.
+Structured public Host facts and up to four approved HTTPS photos are
+transformed into a structured draft. Inferences remain marked until Host
+review. Saving the draft and publishing it are separate Host actions.
 
 ### Search
 
-Natural language becomes structured filters. The database applies hard filters;
-the AI may rank and explain only the returned valid candidates.
+Natural language must resolve to city, dates, occupancy, optional maximum
+nightly amount, and required amenities or return a clarification. Core validates
+the 3–90-night range and atomic amount. The database applies hard filters before
+the AI may rank and explain only those valid candidates. Unknown or duplicated
+Listing IDs are rejected.
 
 ### Commands
 
 The Agent selects from a closed intent vocabulary. Application services load all
-financial and authorization parameters from stored state.
+financial and authorization parameters from stored state. No AI provider
+receives World proofs, signing material, exact property access data, or
+financial authority.
 
 ## World architecture
 

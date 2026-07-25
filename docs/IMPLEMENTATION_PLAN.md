@@ -1,6 +1,6 @@
 # Nook.rent implementation plan
 
-Status: active; Phases 0–6 complete, Phase 7 implemented locally
+Status: active; Phases 0–7 complete, Phase 8 implemented locally
 Strategy: build one end-to-end tracer bullet, then deepen it
 
 ## Completion rule
@@ -255,8 +255,7 @@ Local evidence:
 
 Estimate: 3–5 focused hours
 
-Status: implemented locally on 2026-07-25; live Graph credentials and Agent0
-registration remain the exit check.
+Status: completed and verified live on 2026-07-25.
 
 Implement:
 
@@ -287,17 +286,20 @@ Implemented locally:
   document;
 - live status command and deterministic adapter/API/UI tests.
 
-Remaining live exit:
+Completed live exit:
 
-- configure a server-only Graph API key;
-- deploy the public registration document;
-- register the existing World Guest Agent wallet on Base Sepolia;
-- verify the indexed registration with `pnpm graph:agent-status`;
-- create one protected live hold and capture safe evidence.
+- configured the server-only Graph API key;
+- registered the existing World Guest Agent wallet as Agent `84532:8442`;
+- verified the indexed active registration and named capability;
+- created one protected live Hold with safe World and Graph evidence;
+- repeated the same request without creating another Hold or Booking.
 
 ## Phase 8: constrained AI Agents
 
 Estimate: 4–7 focused hours
+
+Status: implemented locally on 2026-07-25; one opt-in live OpenAI smoke test
+remains.
 
 ### Host Agent
 
@@ -323,6 +325,30 @@ Exit check:
 
 - malformed or adversarial output cannot publish, approve, or pay;
 - the core marketplace still works when AI is disabled.
+
+Implemented locally:
+
+- server-only OpenAI Responses API adapter with strict Zod Structured Outputs;
+- `gpt-5.6-sol` default with low reasoning effort, low verbosity, no response
+  storage, bounded output, timeout, and no automatic retry;
+- Host Agent draft from public structured facts and optional HTTPS image inputs;
+- explicit inferred-field and unconfirmed-amenity markers;
+- Host review before a Listing draft is saved and separate confirmation before
+  publication;
+- Guest natural-language interpretation with a clarification result for missing
+  hard filters;
+- deterministic database filtering before the Agent sees candidates;
+- ranking restricted to exact valid Listing IDs;
+- deterministic Host, search-interpretation, and ranking fallback;
+- API and UI evidence distinguishing live OpenAI from fallback execution;
+- negative tests for field smuggling, invented Listing IDs, invalid hard
+  filters, provider failure, and private or financial draft claims.
+
+Remaining live exit:
+
+- run one explicitly approved Host draft and Guest search against OpenAI;
+- confirm the API reports live execution without exposing prompts, keys, or raw
+  provider responses.
 
 ## Phase 9: Rental Reputation
 
@@ -400,11 +426,11 @@ Provider access or registration delays may add time.
 
 ## Next coding task
 
-Complete the Phase 7 live exit, then continue with Phase 8:
+Complete the Phase 8 live smoke test, then continue with Phase 9:
 
 ```text
-feat: add constrained marketplace agents
+feat: add Rental Reputation projection
 ```
 
-Phase 8 adds the Host Listing Agent and Guest matching Agent while keeping all
-availability, approval, and financial decisions deterministic.
+Phase 9 derives versioned Rental Reputation only from verified rental events;
+World and Graph signals remain separate.

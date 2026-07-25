@@ -1,7 +1,12 @@
 import { randomUUID } from 'node:crypto';
 
+import { createMarketplaceAgentPorts, parseOptionalAiEnvironment } from '@nook-rent/ai';
 import { parseDatabaseEnvironment, parseServerEnvironment } from '@nook-rent/config';
-import { BookingDepositService, MarketplaceService } from '@nook-rent/core';
+import {
+  BookingDepositService,
+  MarketplaceAgentService,
+  MarketplaceService,
+} from '@nook-rent/core';
 import {
   createHederaClient,
   HederaFinancialLedger,
@@ -51,6 +56,14 @@ const marketplace = new MarketplaceService({
     next: () => randomUUID(),
   },
 });
+const aiEnvironment = parseOptionalAiEnvironment(process.env);
+const marketplaceAgentPorts = createMarketplaceAgentPorts(aiEnvironment);
+const marketplaceAgents = new MarketplaceAgentService({
+  marketplace,
+  listingDrafts: marketplaceAgentPorts,
+  guestSearchIntents: marketplaceAgentPorts,
+  listingRankings: marketplaceAgentPorts,
+});
 const hederaEnvironment = parseOptionalHederaEnvironment(process.env);
 const worldEnvironment = parseOptionalWorldVerifierEnvironment(process.env);
 const humanBackedAuthorization = worldEnvironment
@@ -89,6 +102,7 @@ const app = createApi({
   logger: serverEnvironment.nodeEnvironment !== 'test',
   allowedOrigins: serverEnvironment.allowedOrigins,
   marketplace,
+  marketplaceAgents,
   ...(deposits ? { deposits } : {}),
   ...(hederaEnvironment ? { hederaTopicId: hederaEnvironment.topicId.toString() } : {}),
   ...(humanBackedAuthorization && worldEnvironment

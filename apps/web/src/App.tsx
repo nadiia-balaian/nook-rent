@@ -32,8 +32,11 @@ import {
 } from 'react';
 
 import {
+  type AgentExecution,
   type BookingQuote,
   type DepositResult,
+  type GuestAgentSearchResult,
+  type HostAgentDraftResult,
   type Listing,
   type ListingDetail,
   NookApiError,
@@ -41,7 +44,13 @@ import {
   type ReservationResult,
   type SearchInput,
 } from './api.js';
-import { BOOKING_STEPS, DEFAULT_SEARCH, DEMO_PROFILES, type DemoGuestKey } from './demo.js';
+import {
+  BOOKING_STEPS,
+  DEFAULT_GUEST_QUERY,
+  DEFAULT_SEARCH,
+  DEMO_PROFILES,
+  type DemoGuestKey,
+} from './demo.js';
 
 type DemoRole = 'guest' | 'host';
 type ApiStatus = 'checking' | 'ready' | 'unavailable';
@@ -49,6 +58,7 @@ type BusyAction =
   | 'create-listing'
   | 'decide'
   | 'deposit'
+  | 'prepare-listing-draft'
   | 'publish-listing'
   | 'quote'
   | 'reconcile'
@@ -57,6 +67,8 @@ type BusyAction =
   | null;
 
 const initialListingDraft = {
+  propertyType: 'one-bedroom home',
+  highlights: 'calm courtyard, dedicated work corner',
   title: 'Sunny Graça home with a work corner',
   description:
     'A calm one-bedroom home for a short Lisbon stay, with fast Wi-Fi and a dedicated work corner.',
@@ -86,6 +98,14 @@ function formatDate(value: string): string {
     day: 'numeric',
     timeZone: 'UTC',
   }).format(new Date(`${value}T00:00:00.000Z`));
+}
+
+function agentExecutionLabel(execution: AgentExecution): string {
+  if (execution.mode === 'live') {
+    return `Live ${execution.provider === 'openai' ? 'OpenAI' : execution.provider}${execution.model ? ` · ${execution.model}` : ''}`;
+  }
+
+  return `Deterministic fallback${execution.fallbackReason ? ` · ${execution.fallbackReason.replaceAll('_', ' ')}` : ''}`;
 }
 
 function friendlyError(error: NookApiError): string {
@@ -134,6 +154,8 @@ export function App() {
   const [busyAction, setBusyAction] = useState<BusyAction>(null);
   const [error, setError] = useState<NookApiError | null>(null);
   const [guestKey, setGuestKey] = useState<DemoGuestKey>('experiencedGuest');
+  const [guestQuery, setGuestQuery] = useState(DEFAULT_GUEST_QUERY);
+  const [guestAgentSearch, setGuestAgentSearch] = useState<GuestAgentSearchResult | null>(null);
   const [search, setSearch] = useState<SearchInput>({ ...DEFAULT_SEARCH });
   const [listings, setListings] = useState<Listing[] | null>(null);
   const [selectedListing, setSelectedListing] = useState<Listing | null>(null);
@@ -141,6 +163,7 @@ export function App() {
   const [reservation, setReservation] = useState<ReservationResult | null>(null);
   const [deposit, setDeposit] = useState<DepositResult | null>(null);
   const [listingDraft, setListingDraft] = useState(initialListingDraft);
+  const [hostAgentDraft, setHostAgentDraft] = useState<HostAgentDraftResult | null>(null);
   const [createdListing, setCreatedListing] = useState<ListingDetail | null>(null);
 
   const selectedGuest = DEMO_PROFILES[guestKey];
@@ -166,6 +189,7 @@ export function App() {
     setQuote(null);
     setReservation(null);
     setDeposit(null);
+    setGuestAgentSearch(null);
     setError(null);
   };
 
@@ -194,8 +218,29 @@ export function App() {
     setReservation(null);
     setDeposit(null);
 
-    const result = await runAction('search', () => nookApi.searchListings(search));
-    if (result) setListings(result.items);
+    const result = await runAction('search', () => nookApi.searchWithGuestAgent(guestQuery));
+
+    if (!result) return;
+
+    setGuestAgentSearch(result);
+    if (result.status === 'needs_clarification') {
+      setListings(null);
+      return;
+    }
+
+    setSearch({
+      city: result.interpretation.city,
+      checkIn: result.interpretation.checkIn,
+      checkOut: result.interpretation.checkOut,
+      guests: result.interpretation.guests,
+      ...(result.interpretation.maximumNightlyRateAtomic
+        ? {
+            maximumNightlyRateAtomic: result.interpretation.maximumNightlyRateAtomic,
+          }
+        : {}),
+      amenities: result.interpretation.requiredAmenities.join(', '),
+    });
+    setListings(result.items.map((item) => item.listing));
   };
 
   const createQuote = async (listing: Listing) => {
@@ -287,10 +332,46 @@ export function App() {
     }
   };
 
-  const createListing = async (event: FormEvent) => {
+  const prepareListingDraft = async (event: FormEvent) => {
     event.preventDefault();
+    setHostAgentDraft(null);
     setCreatedListing(null);
 
+    const result = await runAction('prepare-listing-draft', () =>
+      nookApi.createHostAgentDraft({
+        hostFacts: {
+          city: listingDraft.city,
+          neighborhood: listingDraft.neighborhood,
+          propertyType: listingDraft.propertyType,
+          maxGuests: listingDraft.maxGuests,
+          confirmedAmenities: listingDraft.amenities
+            .split(',')
+            .map((item) => item.trim())
+            .filter(Boolean),
+          houseRules: listingDraft.houseRules
+            .split(',')
+            .map((item) => item.trim())
+            .filter(Boolean),
+          highlights: listingDraft.highlights
+            .split(',')
+            .map((item) => item.trim())
+            .filter(Boolean),
+        },
+        imageRefs: [],
+      }),
+    );
+
+    if (result) {
+      setHostAgentDraft(result);
+      setListingDraft((current) => ({
+        ...current,
+        title: result.draft.title,
+        description: result.draft.description,
+      }));
+    }
+  };
+
+  const createListing = async () => {
     const result = await runAction('create-listing', () =>
       nookApi.createListing({
         hostProfileId: DEMO_PROFILES.host.id,
@@ -393,6 +474,8 @@ export function App() {
             deposit={deposit}
             error={error}
             guestKey={guestKey}
+            guestQuery={guestQuery}
+            guestAgentSearch={guestAgentSearch}
             listings={listings}
             quote={quote}
             quoteExpired={quoteExpired}
@@ -405,7 +488,7 @@ export function App() {
             onReconcileDeposit={reconcileDeposit}
             onReserve={reserveDates}
             onSearch={searchListings}
-            setSearch={setSearch}
+            setGuestQuery={setGuestQuery}
             switchToHost={() => setRole('host')}
           />
         ) : (
@@ -414,9 +497,11 @@ export function App() {
             createdListing={createdListing}
             error={error}
             listingDraft={listingDraft}
+            hostAgentDraft={hostAgentDraft}
             reservation={reservation}
             onCreateListing={createListing}
             onDecision={decideRequest}
+            onPrepareListingDraft={prepareListingDraft}
             onPublishListing={publishListing}
             setListingDraft={setListingDraft}
             switchToGuest={() => setRole('guest')}
@@ -455,7 +540,9 @@ interface GuestExperienceProps {
   busyAction: BusyAction;
   deposit: DepositResult | null;
   error: NookApiError | null;
+  guestAgentSearch: GuestAgentSearchResult | null;
   guestKey: DemoGuestKey;
+  guestQuery: string;
   listings: Listing[] | null;
   quote: BookingQuote | null;
   quoteExpired: boolean;
@@ -468,7 +555,7 @@ interface GuestExperienceProps {
   onReconcileDeposit: () => Promise<void>;
   onReserve: () => Promise<void>;
   onSearch: (event: FormEvent) => Promise<void>;
-  setSearch: Dispatch<SetStateAction<SearchInput>>;
+  setGuestQuery: Dispatch<SetStateAction<string>>;
   switchToHost: () => void;
 }
 
@@ -510,85 +597,53 @@ function GuestExperience(props: GuestExperienceProps) {
             <Search size={23} />
           </div>
 
+          <label className="field field-wide agent-query">
+            <span>Describe the stay</span>
+            <textarea
+              required
+              rows={3}
+              value={props.guestQuery}
+              onChange={(event) => props.setGuestQuery(event.target.value)}
+            />
+          </label>
+          <p className="agent-boundary-note">
+            The Agent may interpret and rank. Stored availability, price, and approval rules remain
+            deterministic.
+          </p>
+
           <label className="field field-wide">
-            <span>City</span>
+            <span>Parsed city</span>
             <div className="input-with-icon">
               <MapPin size={16} />
-              <input
-                required
-                value={props.search.city}
-                onChange={(event) =>
-                  props.setSearch((current) => ({ ...current, city: event.target.value }))
-                }
-              />
+              <input readOnly value={props.search.city} />
             </div>
           </label>
 
           <div className="field-row">
             <label className="field">
-              <span>Check in</span>
-              <input
-                required
-                type="date"
-                value={props.search.checkIn}
-                onChange={(event) =>
-                  props.setSearch((current) => ({ ...current, checkIn: event.target.value }))
-                }
-              />
+              <span>Parsed check in</span>
+              <input readOnly type="date" value={props.search.checkIn} />
             </label>
             <label className="field">
-              <span>Check out</span>
-              <input
-                required
-                type="date"
-                value={props.search.checkOut}
-                onChange={(event) =>
-                  props.setSearch((current) => ({ ...current, checkOut: event.target.value }))
-                }
-              />
+              <span>Parsed check out</span>
+              <input readOnly type="date" value={props.search.checkOut} />
             </label>
           </div>
 
           <div className="field-row">
             <label className="field">
-              <span>Guests</span>
-              <input
-                min="1"
-                required
-                type="number"
-                value={props.search.guests}
-                onChange={(event) =>
-                  props.setSearch((current) => ({
-                    ...current,
-                    guests: Number(event.target.value),
-                  }))
-                }
-              />
+              <span>Parsed guests</span>
+              <input readOnly type="number" value={props.search.guests} />
             </label>
             <label className="field">
-              <span>Max nightly · test units</span>
-              <input
-                inputMode="numeric"
-                value={props.search.maximumNightlyRateAtomic}
-                onChange={(event) =>
-                  props.setSearch((current) => ({
-                    ...current,
-                    maximumNightlyRateAtomic: event.target.value,
-                  }))
-                }
-              />
+              <span>Parsed max nightly · test units</span>
+              <input readOnly value={props.search.maximumNightlyRateAtomic ?? ''} />
             </label>
           </div>
 
           <label className="field field-wide">
-            <span>Must have</span>
-            <input
-              placeholder="wifi, desk"
-              value={props.search.amenities}
-              onChange={(event) =>
-                props.setSearch((current) => ({ ...current, amenities: event.target.value }))
-              }
-            />
+            <span>Parsed must-have amenities</span>
+            <input readOnly value={props.search.amenities} />
           </label>
 
           <button className="primary-button search-button" disabled={props.busyAction !== null}>
@@ -604,6 +659,28 @@ function GuestExperience(props: GuestExperienceProps) {
           </button>
         </form>
       </section>
+
+      {props.guestAgentSearch?.status === 'needs_clarification' && (
+        <section className="agent-clarification" aria-live="polite">
+          <Sparkles size={19} />
+          <div>
+            <strong>The Guest Agent needs one detail.</strong>
+            <p>{props.guestAgentSearch.question}</p>
+          </div>
+        </section>
+      )}
+
+      {props.guestAgentSearch?.status === 'ready' && (
+        <div className="agent-run-status" aria-live="polite">
+          <Sparkles size={15} />
+          <span>
+            {agentExecutionLabel(props.guestAgentSearch.agent.interpretation)}
+            {props.guestAgentSearch.agent.ranking
+              ? ` · ranking: ${agentExecutionLabel(props.guestAgentSearch.agent.ranking)}`
+              : ''}
+          </span>
+        </div>
+      )}
 
       <section className="persona-section" aria-labelledby="persona-heading">
         <div>
@@ -687,6 +764,22 @@ function GuestExperience(props: GuestExperienceProps) {
                     </div>
                     <h3>{listing.title}</h3>
                     <p>{listing.description}</p>
+                    {props.guestAgentSearch?.status === 'ready' &&
+                      (() => {
+                        const recommendation = props.guestAgentSearch.items.find(
+                          (item) => item.listing.id === listing.id,
+                        );
+
+                        return recommendation ? (
+                          <div className="agent-match">
+                            <span>
+                              <Sparkles size={13} /> Agent match
+                            </span>
+                            <p>{recommendation.summary}</p>
+                            <small>{recommendation.matchReasons.join(' · ')}</small>
+                          </div>
+                        ) : null;
+                      })()}
                     <div className="amenity-row">
                       {listing.amenities.slice(0, 4).map((amenity) => (
                         <span key={amenity}>{amenity}</span>
@@ -997,10 +1090,12 @@ interface HostExperienceProps {
   busyAction: BusyAction;
   createdListing: ListingDetail | null;
   error: NookApiError | null;
+  hostAgentDraft: HostAgentDraftResult | null;
   listingDraft: typeof initialListingDraft;
   reservation: ReservationResult | null;
-  onCreateListing: (event: FormEvent) => Promise<void>;
+  onCreateListing: () => Promise<void>;
   onDecision: (decision: 'approved' | 'rejected') => Promise<void>;
+  onPrepareListingDraft: (event: FormEvent) => Promise<void>;
   onPublishListing: () => Promise<void>;
   setListingDraft: Dispatch<SetStateAction<typeof initialListingDraft>>;
   switchToGuest: () => void;
@@ -1133,8 +1228,8 @@ function HostExperience(props: HostExperienceProps) {
           <span className="step-label">Host Agent · Listing draft</span>
           <h2 id="builder-heading">Turn the facts into a clear offer</h2>
           <p>
-            You control dates, price, deposit, and publication. The current preview is
-            deterministic; constrained AI drafting arrives in Phase 8.
+            The Agent drafts only public copy from the facts below. You still control dates, price,
+            deposit, amenities, and publication.
           </p>
           <ul className="builder-rules">
             <li>
@@ -1149,7 +1244,39 @@ function HostExperience(props: HostExperienceProps) {
           </ul>
         </div>
 
-        <form className="listing-form" onSubmit={(event) => void props.onCreateListing(event)}>
+        <form
+          className="listing-form"
+          onSubmit={(event) => void props.onPrepareListingDraft(event)}
+        >
+          <div className="field-row">
+            <label className="field">
+              <span>Property type</span>
+              <input
+                required
+                value={props.listingDraft.propertyType}
+                onChange={(event) =>
+                  props.setListingDraft((current) => ({
+                    ...current,
+                    propertyType: event.target.value,
+                  }))
+                }
+              />
+            </label>
+            <label className="field field-grow">
+              <span>Public highlights · comma separated</span>
+              <input
+                required
+                value={props.listingDraft.highlights}
+                onChange={(event) =>
+                  props.setListingDraft((current) => ({
+                    ...current,
+                    highlights: event.target.value,
+                  }))
+                }
+              />
+            </label>
+          </div>
+
           <div className="field-row">
             <label className="field field-grow">
               <span>Listing title</span>
@@ -1295,17 +1422,57 @@ function HostExperience(props: HostExperienceProps) {
           </label>
 
           <button className="primary-button" disabled={props.busyAction !== null}>
-            {props.busyAction === 'create-listing' ? (
+            {props.busyAction === 'prepare-listing-draft' ? (
               <>
-                <LoaderCircle className="spin" size={17} /> Preparing draft…
+                <LoaderCircle className="spin" size={17} /> Host Agent is drafting…
               </>
             ) : (
               <>
-                Prepare draft <Sparkles size={17} />
+                Ask Host Agent to draft <Sparkles size={17} />
               </>
             )}
           </button>
         </form>
+
+        {props.hostAgentDraft && !props.createdListing && (
+          <article className="agent-draft-review">
+            <div className="draft-preview-top">
+              <span className="draft-status">
+                <Clock3 size={14} /> Host confirmation required
+              </span>
+              <span>{agentExecutionLabel(props.hostAgentDraft.agent)}</span>
+            </div>
+            <h3>Review the Agent proposal</h3>
+            <p>
+              Title and description were placed back into the editable form. Suggested amenities
+              stay unconfirmed until you add them yourself.
+            </p>
+            {props.hostAgentDraft.draft.suggestedAmenities.length > 0 && (
+              <div className="agent-suggestions">
+                <strong>Unconfirmed suggestions</strong>
+                {props.hostAgentDraft.draft.suggestedAmenities.map((amenity) => (
+                  <span key={amenity}>{amenity}</span>
+                ))}
+              </div>
+            )}
+            <button
+              className="primary-button"
+              disabled={props.busyAction !== null}
+              type="button"
+              onClick={() => void props.onCreateListing()}
+            >
+              {props.busyAction === 'create-listing' ? (
+                <>
+                  <LoaderCircle className="spin" size={17} /> Saving reviewable draft…
+                </>
+              ) : (
+                <>
+                  Accept copy and save draft <Check size={17} />
+                </>
+              )}
+            </button>
+          </article>
+        )}
 
         {props.createdListing && (
           <article className="draft-preview">

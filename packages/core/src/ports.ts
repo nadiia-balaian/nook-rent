@@ -127,7 +127,15 @@ export interface OnchainSignalPort {
 }
 
 export interface ListingDraftInput {
-  hostFacts: Record<string, string | number | boolean | string[]>;
+  hostFacts: {
+    city: string;
+    neighborhood: string;
+    propertyType: string;
+    maxGuests: number;
+    confirmedAmenities: string[];
+    houseRules: string[];
+    highlights: string[];
+  };
   imageRefs: string[];
 }
 
@@ -135,11 +143,66 @@ export interface ListingDraft {
   title: string;
   description: string;
   suggestedAmenities: string[];
-  inferredFields: string[];
+  inferredFields: Array<'description' | 'suggestedAmenities' | 'title'>;
+}
+
+export interface AgentExecution {
+  provider: 'deterministic' | 'openai';
+  mode: 'fallback' | 'live';
+  model?: string;
+  fallbackReason?: 'invalid_output' | 'provider_unavailable' | 'provider_error';
+}
+
+export interface AgentResult<T> {
+  value: T;
+  execution: AgentExecution;
 }
 
 export interface ListingDraftPort {
-  createDraft(input: ListingDraftInput): Promise<ListingDraft>;
+  createDraft(input: ListingDraftInput): Promise<AgentResult<ListingDraft>>;
+}
+
+export type GuestSearchInterpretation =
+  | {
+      status: 'needs_clarification';
+      question: string;
+    }
+  | {
+      status: 'ready';
+      city: string;
+      checkIn: string;
+      checkOut: string;
+      guests: number;
+      maximumNightlyRateAtomic?: string;
+      requiredAmenities: string[];
+    };
+
+export interface GuestSearchIntentPort {
+  interpretSearch(input: { query: string }): Promise<AgentResult<GuestSearchInterpretation>>;
+}
+
+export interface ListingRankCandidate {
+  id: string;
+  title: string;
+  city: string;
+  neighborhood: string;
+  amenities: string[];
+  nightlyRateAtomic: string;
+  maxGuests: number;
+}
+
+export interface ListingRecommendation {
+  listingId: string;
+  summary: string;
+  matchReasons: string[];
+}
+
+export interface ListingRankingPort {
+  rankListings(input: {
+    query: string;
+    interpretation: Extract<GuestSearchInterpretation, { status: 'ready' }>;
+    candidates: ListingRankCandidate[];
+  }): Promise<AgentResult<ListingRecommendation[]>>;
 }
 
 export interface DepositSubmission {

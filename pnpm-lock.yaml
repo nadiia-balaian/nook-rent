@@ -37,6 +37,9 @@ importers:
       '@fastify/cors':
         specifier: 11.3.0
         version: 11.3.0
+      '@nook-rent/ai':
+        specifier: workspace:*
+        version: link:../../packages/ai
       '@nook-rent/config':
         specifier: workspace:*
         version: link:../../packages/config
@@ -118,6 +121,12 @@ importers:
       '@nook-rent/core':
         specifier: workspace:*
         version: link:../core
+      openai:
+        specifier: 6.49.0
+        version: 6.49.0(ws@8.21.0)(zod@4.4.3)
+      zod:
+        specifier: 4.4.3
+        version: 4.4.3
 
   packages/config:
     dependencies:
@@ -3527,6 +3536,29 @@ packages:
       }
     engines: { node: '>=8' }
 
+  openai@6.49.0:
+    resolution:
+      {
+        integrity: sha512-aYCc0C6L864eR6WSYIwQGyXriw/nIyZx0ObvhzOEVuk0zoBDpynjSbrionWI7q65B5H8jJX0DXR9snEzM6bfPg==,
+      }
+    peerDependencies:
+      '@aws-sdk/credential-provider-node': '>=3.972.0 <4'
+      '@smithy/hash-node': '>=4.3.0 <5'
+      '@smithy/signature-v4': '>=5.4.0 <6'
+      ws: ^8.18.0
+      zod: ^3.25 || ^4.0
+    peerDependenciesMeta:
+      '@aws-sdk/credential-provider-node':
+        optional: true
+      '@smithy/hash-node':
+        optional: true
+      '@smithy/signature-v4':
+        optional: true
+      ws:
+        optional: true
+      zod:
+        optional: true
+
   optionator@0.9.4:
     resolution:
       {
@@ -6763,6 +6795,11 @@ snapshots:
     dependencies:
       is-docker: 2.2.1
       is-wsl: 2.2.0
+
+  openai@6.49.0(ws@8.21.0)(zod@4.4.3):
+    optionalDependencies:
+      ws: 8.21.0
+      zod: 4.4.3
 
   optionator@0.9.4:
     dependencies:

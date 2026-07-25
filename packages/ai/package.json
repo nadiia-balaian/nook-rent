@@ -10,6 +10,8 @@
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
-    "@nook-rent/core": "workspace:*"
+    "@nook-rent/core": "workspace:*",
+    "openai": "6.49.0",
+    "zod": "4.4.3"
   }
 }

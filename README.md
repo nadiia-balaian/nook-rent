@@ -41,8 +41,9 @@ rental behavior.
 
 ## Repository status
 
-Phases 1–6 are complete and Phase 7 is implemented locally. The Hedera tracer
-and World AgentKit authorization have both produced verified live evidence:
+Phases 1–7 are complete and Phase 8 is implemented locally. Hedera, World
+AgentKit, and The Graph have produced verified live evidence; the constrained
+OpenAI path is ready for one opt-in live smoke test:
 
 - `pnpm` TypeScript monorepo and shared quality gate;
 - Fastify API shell with a tested health endpoint;
@@ -83,6 +84,16 @@ and World AgentKit authorization have both produced verified live evidence:
 - guarded Agent0 registration and live status commands;
 - safe browser evidence that never reveals the Graph key, raw response, or
   signing wallet.
+- constrained Host drafting with inferred fields and unconfirmed suggestions
+  clearly marked;
+- Guest natural-language interpretation followed by deterministic database
+  filtering and valid-only Agent ranking;
+- strict OpenAI Structured Outputs with no response storage and bounded
+  execution;
+- visible deterministic fallback when OpenAI is absent or unavailable;
+- Host review before saving and a separate confirmation before publication;
+- adversarial tests preventing Agent output from selecting approval, payment,
+  deposit, token, recipient, or an invalid Listing.
 
 The first five database migrations are applied to the isolated `nook` schema in
 hosted Supabase. The pseudonymous demo seed contains three profiles, two Lisbon
@@ -138,6 +149,11 @@ pnpm dev
 This starts the API and web application together. The API exposes `/health`,
 `/ready`, and the marketplace routes under `/v1`. The web application uses
 `VITE_API_URL`, or `http://localhost:3100` when it is not set.
+
+`OPENAI_API_KEY` enables the live constrained Host and Guest Agents.
+`OPENAI_MODEL` defaults to `gpt-5.6-sol`. Without an OpenAI key, the same UI and
+API use a visible deterministic fallback; availability, pricing, approval, and
+payments remain deterministic in both modes.
 
 Running `pnpm supabase:seed-demo` is an explicit database write and should be
 used only against the intended demo environment.

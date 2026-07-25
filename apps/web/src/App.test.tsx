@@ -183,8 +183,104 @@ function installMarketplaceApi(
       if (url.pathname === '/ready') {
         return Promise.resolve(jsonResponse({ service: 'nook-api', status: 'ready' }));
       }
+      if (url.pathname === '/v1/agents/guest/search') {
+        return Promise.resolve(
+          jsonResponse({
+            status: 'ready',
+            interpretation: {
+              status: 'ready',
+              city: 'Lisbon',
+              checkIn: '2026-08-20',
+              checkOut: '2026-08-25',
+              guests: 1,
+              maximumNightlyRateAtomic: '15000',
+              requiredAmenities: ['wifi'],
+            },
+            totalMatches: 1,
+            items: [
+              {
+                listing,
+                summary: 'The best valid work-friendly match.',
+                matchReasons: ['Includes wifi', 'Within the nightly limit'],
+              },
+            ],
+            agent: {
+              interpretation: {
+                provider: 'openai',
+                mode: 'live',
+                model: 'test-model',
+              },
+              ranking: {
+                provider: 'openai',
+                mode: 'live',
+                model: 'test-model',
+              },
+            },
+          }),
+        );
+      }
+      if (url.pathname === '/v1/listings/drafts') {
+        return Promise.resolve(
+          jsonResponse({
+            draft: {
+              title: 'Agent-drafted Graça home',
+              description: 'A calm public description based only on confirmed Host facts.',
+              suggestedAmenities: ['workspace'],
+              inferredFields: ['title', 'description', 'suggestedAmenities'],
+            },
+            agent: {
+              provider: 'openai',
+              mode: 'live',
+              model: 'test-model',
+            },
+            requiresHostConfirmation: true,
+          }),
+        );
+      }
       if (url.pathname === '/v1/listings' && (!init?.method || init.method === 'GET')) {
         return Promise.resolve(jsonResponse({ items: [listing] }));
+      }
+      if (url.pathname === '/v1/listings' && init?.method === 'POST') {
+        return Promise.resolve(
+          jsonResponse({
+            listing: {
+              ...listing,
+              title: 'Agent-drafted Graça home',
+              status: 'draft',
+            },
+            availability: [],
+            approvalPolicy: {
+              listingId: listing.id,
+              policy: {
+                automaticApprovalEnabled: true,
+                minimumRentalReputationTier: 'silver',
+              },
+              version: 1,
+              updatedAt: listing.updatedAt,
+            },
+          }),
+        );
+      }
+      if (url.pathname.endsWith('/publish')) {
+        return Promise.resolve(
+          jsonResponse({
+            listing: {
+              ...listing,
+              title: 'Agent-drafted Graça home',
+              status: 'published',
+            },
+            availability: [],
+            approvalPolicy: {
+              listingId: listing.id,
+              policy: {
+                automaticApprovalEnabled: true,
+                minimumRentalReputationTier: 'silver',
+              },
+              version: 1,
+              updatedAt: listing.updatedAt,
+            },
+          }),
+        );
       }
       if (url.pathname === '/v1/booking-quotes') {
         return Promise.resolve(
@@ -272,6 +368,7 @@ describe('Nook marketplace demo', () => {
 
     await user.click(screen.getByRole('button', { name: 'Show available homes' }));
     expect(await screen.findByText(listing.title)).toBeTruthy();
+    expect(screen.getByText('The best valid work-friendly match.')).toBeTruthy();
 
     await user.click(screen.getByRole('button', { name: 'View quote' }));
     expect(await screen.findByRole('heading', { name: 'Review the exact terms' })).toBeTruthy();
@@ -327,5 +424,25 @@ describe('Nook marketplace demo', () => {
         'A World-verified Guest Agent must authorize this hold. Use the Guest Agent flow, then try again.',
       ),
     ).toBeTruthy();
+  });
+
+  it('keeps the Host in control of Agent drafting and publication', async () => {
+    installMarketplaceApi('automatic');
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await user.click(await screen.findByRole('button', { name: 'Host desk' }));
+    await user.click(screen.getByRole('button', { name: 'Ask Host Agent to draft' }));
+
+    expect(await screen.findByRole('heading', { name: 'Review the Agent proposal' })).toBeTruthy();
+    expect(screen.getByText('workspace')).toBeTruthy();
+    expect(screen.getByText(/Live OpenAI/)).toBeTruthy();
+
+    await user.click(screen.getByRole('button', { name: 'Accept copy and save draft' }));
+    expect(await screen.findByText('Agent-drafted Graça home')).toBeTruthy();
+
+    await user.click(screen.getByRole('button', { name: 'Confirm and publish' }));
+    expect(await screen.findByText('Published')).toBeTruthy();
   });
 });

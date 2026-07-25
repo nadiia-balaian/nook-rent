@@ -4,6 +4,7 @@ export * from './deposit-service.js';
 export * from './entities.js';
 export * from './errors.js';
 export * from './local-date.js';
+export * from './marketplace-agent-service.js';
 export * from './marketplace-service.js';
 export * from './ports.js';
 export * from './state-machine.js';
