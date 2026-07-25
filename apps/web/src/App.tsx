@@ -821,7 +821,6 @@ export function App() {
           preset={proofOfHuman({
             signal: role === 'host' ? DEMO_PROFILES.host.id : selectedGuest.id,
           })}
-          require_user_presence
           rp_context={memberWorldIdRpContext}
         />
       )}
