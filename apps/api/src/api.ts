@@ -176,6 +176,12 @@ const worldIdProofBody = z
   })
   .strict();
 
+const worldIdStatusQuery = z
+  .object({
+    profileId: uuid,
+  })
+  .strict();
+
 const decisionBody = z.object({
   hostProfileId: uuid,
   decision: z.enum(['approved', 'rejected']),
@@ -762,6 +768,34 @@ export function createApi(options: CreateApiOptions = {}): FastifyInstance {
     return worldId.verification.createRpContext();
   };
 
+  const getWorldIdMemberStatus = async (request: FastifyRequest) => {
+    const input = worldIdStatusQuery.parse(request.query);
+    const worldId = requireMemberWorldId(
+      options.memberWorldId,
+      options.worldIdVerifications,
+      request,
+    );
+    const config = worldId.verification.publicConfig();
+    const humanVerified = await worldId.repository.isVerified({
+      profileId: input.profileId,
+      action: config.action,
+    });
+
+    if (!humanVerified) {
+      return {
+        humanVerified: false,
+      };
+    }
+
+    return {
+      provider: 'world_id' as const,
+      credential: 'proof_of_human' as const,
+      humanVerified: true as const,
+      environment: config.environment,
+      status: 'existing' as const,
+    };
+  };
+
   const verifyWorldIdMember = async (request: FastifyRequest) => {
     const input = worldIdProofBody.parse(request.body);
     const worldId = requireMemberWorldId(
@@ -795,11 +829,13 @@ export function createApi(options: CreateApiOptions = {}): FastifyInstance {
   };
 
   app.get('/v1/world-id/member/config', getWorldIdMemberConfig);
+  app.get('/v1/world-id/member/status', getWorldIdMemberStatus);
   app.post('/v1/world-id/member/rp-signature', createWorldIdMemberRpContext);
   app.post('/v1/world-id/member/verify', verifyWorldIdMember);
 
   // Keep the original Host URLs during the deployed client transition.
   app.get('/v1/world-id/host/config', getWorldIdMemberConfig);
+  app.get('/v1/world-id/host/status', getWorldIdMemberStatus);
   app.post('/v1/world-id/host/rp-signature', createWorldIdMemberRpContext);
   app.post('/v1/world-id/host/verify', verifyWorldIdMember);
 

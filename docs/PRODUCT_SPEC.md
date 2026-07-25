@@ -63,6 +63,9 @@ exists.
 ## 5. Member roles
 
 A Member can be a Host, a Guest, or both.
+World ID verification belongs to the Member profile, not to a role. A verified
+Member who changes between Host and Guest is not asked to repeat the same
+action.
 
 ### Host
 
@@ -312,6 +315,7 @@ capabilities:
 POST   /v1/profiles
 POST   /v1/agents/verify
 GET    /v1/world-id/member/config
+GET    /v1/world-id/member/status
 POST   /v1/world-id/member/rp-signature
 POST   /v1/world-id/member/verify
 POST   /v1/agents/guest/world-connection

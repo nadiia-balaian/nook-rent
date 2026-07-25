@@ -245,6 +245,38 @@ export function App() {
     void checkApi();
   }, []);
 
+  useEffect(() => {
+    if (screen !== 'identity') return;
+
+    let active = true;
+    const profileId = role === 'host' ? DEMO_PROFILES.host.id : selectedGuest.id;
+    setBusyAction('connect-world-id');
+    setError(null);
+
+    void nookApi
+      .memberWorldIdStatus(profileId)
+      .then((status) => {
+        if (active && status.humanVerified) {
+          setMemberWorldIdVerification(status);
+        }
+      })
+      .catch((caught) => {
+        if (!active) return;
+        setError(
+          caught instanceof NookApiError
+            ? caught
+            : new NookApiError('unexpected_error', 'Unexpected application error'),
+        );
+      })
+      .finally(() => {
+        if (active) setBusyAction(null);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [role, screen, selectedGuest.id]);
+
   const navigate = (next: Screen) => {
     setError(null);
     setScreen(next);
@@ -316,6 +348,14 @@ export function App() {
     setError(null);
 
     try {
+      const profileId = role === 'host' ? DEMO_PROFILES.host.id : selectedGuest.id;
+      const status = await nookApi.memberWorldIdStatus(profileId);
+
+      if (status.humanVerified) {
+        setMemberWorldIdVerification(status);
+        return;
+      }
+
       const [config, rpContext] = await Promise.all([
         nookApi.memberWorldIdConfig(),
         nookApi.createMemberWorldIdRpContext(),

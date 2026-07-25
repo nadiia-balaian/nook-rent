@@ -14,8 +14,8 @@ try {
     await transaction`
       insert into nook.profiles (id, role, public_ref)
       values
-        ('10000000-0000-4000-8000-000000000001', 'host', 'maria-host'),
-        ('20000000-0000-4000-8000-000000000001', 'guest', 'experienced-guest'),
+        ('10000000-0000-4000-8000-000000000001', 'both', 'maria-member'),
+        ('10000000-0000-4000-8000-000000000002', 'host', 'lisbon-demo-host'),
         ('20000000-0000-4000-8000-000000000002', 'guest', 'newcomer-guest')
       on conflict (id) do update
       set
@@ -42,7 +42,7 @@ try {
       values
         (
           '30000000-0000-4000-8000-000000000001',
-          '10000000-0000-4000-8000-000000000001',
+          '10000000-0000-4000-8000-000000000002',
           'Alfama work-friendly nook',
           'A bright temporary stay with reliable Wi-Fi and a dedicated desk.',
           'Lisbon',
@@ -58,7 +58,7 @@ try {
         ),
         (
           '30000000-0000-4000-8000-000000000002',
-          '10000000-0000-4000-8000-000000000001',
+          '10000000-0000-4000-8000-000000000002',
           'Estrela garden studio',
           'A calm studio near the garden for a short work or event stay.',
           'Lisbon',
@@ -74,6 +74,7 @@ try {
         )
       on conflict (id) do update
       set
+        host_profile_id = excluded.host_profile_id,
         title = excluded.title,
         description = excluded.description,
         city = excluded.city,
@@ -135,7 +136,7 @@ try {
         event_count
       )
       values (
-        '20000000-0000-4000-8000-000000000001',
+        '10000000-0000-4000-8000-000000000001',
         1,
         3,
         'silver',

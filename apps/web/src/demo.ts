@@ -1,13 +1,15 @@
+const CURRENT_MEMBER_ID = '10000000-0000-4000-8000-000000000001';
+
 export const DEMO_PROFILES = {
   host: {
-    id: '10000000-0000-4000-8000-000000000001',
+    id: CURRENT_MEMBER_ID,
     name: 'Maria',
-    label: 'Demo Host',
+    label: 'Demo Member · Host',
   },
   experiencedGuest: {
-    id: '20000000-0000-4000-8000-000000000001',
-    name: 'Alex',
-    label: 'Experienced Guest demo',
+    id: CURRENT_MEMBER_ID,
+    name: 'Maria',
+    label: 'Demo Member · Guest',
     reputationLabel: 'Silver · 3 verified stays',
     tier: 'silver',
   },

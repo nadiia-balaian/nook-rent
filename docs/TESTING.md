@@ -126,8 +126,10 @@ Agent registration, AgentBook lookup on World Chain, protected Hold creation,
 fresh-nonce idempotent retry, and rejection of a second concurrent Hold.
 
 The Member World ID suite verifies profile-bound proofs, safe public
-configuration, signed RP contexts, provider rejection, direct Host and Guest
-gating, and protected-hold rechecks with controlled dependencies. It does not
+configuration, signed RP contexts, persisted verification restoration after a
+browser restart, cross-role reuse for one Member, provider rejection, direct
+Host and Guest gating, and
+protected-hold rechecks with controlled dependencies. It does not
 count as live World evidence until the Member action is installed in the
 Developer Portal, the hosted migrations are applied, and a World App proof
 succeeds end to end.
@@ -180,8 +182,8 @@ tracer. These controlled tests do not count as a paid live OpenAI check.
 
 Use pseudonymous, clearly seeded data:
 
-- one Host;
-- one experienced Guest;
+- one Member who can act as Host or experienced Guest;
+- one separate Host who owns the searchable demo Listings;
 - one Newcomer;
 - one unverified Agent;
 - two Lisbon Listings;

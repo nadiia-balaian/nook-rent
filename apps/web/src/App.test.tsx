@@ -42,7 +42,7 @@ vi.mock('@worldcoin/idkit', () => ({
 
 const listing: Listing = {
   id: '30000000-0000-4000-8000-000000000001',
-  hostProfileId: '10000000-0000-4000-8000-000000000001',
+  hostProfileId: '10000000-0000-4000-8000-000000000002',
   title: 'Calm Alfama room near the river',
   description: 'A bright room with a desk, fast Wi-Fi, and a quiet courtyard.',
   city: 'Lisbon',
@@ -62,7 +62,7 @@ const listing: Listing = {
 const quote: BookingQuote = {
   id: '40000000-0000-4000-8000-000000000001',
   listingId: listing.id,
-  guestProfileId: '20000000-0000-4000-8000-000000000001',
+  guestProfileId: '10000000-0000-4000-8000-000000000001',
   checkIn: '2026-08-20',
   checkOut: '2026-08-25',
   nights: 5,
@@ -205,6 +205,7 @@ function installMarketplaceApi(
   options: { requireWorldAgent?: boolean } = {},
 ) {
   const initialReservation = reservation(mode);
+  const verifiedMemberProfiles = new Set<string>();
   vi.stubGlobal('scrollTo', vi.fn());
 
   vi.stubGlobal(
@@ -227,6 +228,24 @@ function installMarketplaceApi(
           }),
         );
       }
+      if (url.pathname === '/v1/world-id/member/status') {
+        const profileId = url.searchParams.get('profileId');
+        return Promise.resolve(
+          jsonResponse(
+            profileId && verifiedMemberProfiles.has(profileId)
+              ? {
+                  provider: 'world_id',
+                  credential: 'proof_of_human',
+                  humanVerified: true,
+                  environment: 'staging',
+                  status: 'existing',
+                }
+              : {
+                  humanVerified: false,
+                },
+          ),
+        );
+      }
       if (url.pathname === '/v1/world-id/member/rp-signature') {
         return Promise.resolve(
           jsonResponse({
@@ -239,6 +258,11 @@ function installMarketplaceApi(
         );
       }
       if (url.pathname === '/v1/world-id/member/verify') {
+        if (typeof init?.body !== 'string') {
+          throw new Error('Expected JSON request body for Member verification');
+        }
+        const body = JSON.parse(init.body) as { profileId: string };
+        verifiedMemberProfiles.add(body.profileId);
         return Promise.resolve(
           jsonResponse({
             provider: 'world_id',
@@ -523,6 +547,24 @@ describe('Nook marketplace demo', () => {
     expect(screen.getByRole('heading', { name: 'A familiar welcome.' })).toBeTruthy();
     expect(screen.getByRole('button', { name: /I want to rent out my place/ })).toBeTruthy();
     expect(screen.getByRole('button', { name: /I’m looking for a place/ })).toBeTruthy();
+  });
+
+  it('reuses one Member verification when changing from Host to Guest', async () => {
+    installMarketplaceApi('automatic');
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await user.click(await screen.findByRole('button', { name: 'Get started' }));
+    await user.click(screen.getByRole('button', { name: /I want to rent out my place/ }));
+    await completeMemberWorldId(user);
+
+    await user.click(screen.getByRole('button', { name: 'Restart' }));
+    await user.click(screen.getByRole('button', { name: 'Get started' }));
+    await user.click(screen.getByRole('button', { name: /I’m looking for a place/ }));
+
+    expect((await screen.findAllByText('World ID verified')).length).toBeGreaterThan(0);
+    expect(screen.queryByRole('button', { name: 'Verify with World ID' })).toBeNull();
   });
 
   it('completes automatic approval and Testnet deposit confirmation', async () => {

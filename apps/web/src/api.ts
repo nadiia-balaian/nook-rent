@@ -190,8 +190,14 @@ export interface WorldIdMemberVerification {
   credential: 'proof_of_human';
   humanVerified: true;
   environment: 'production' | 'staging' | 'sandbox';
-  status: 'created' | 'idempotent';
+  status: 'created' | 'existing' | 'idempotent';
 }
+
+export type WorldIdMemberStatus =
+  | WorldIdMemberVerification
+  | {
+      humanVerified: false;
+    };
 
 export interface WalletChallenge {
   address: string;
@@ -434,6 +440,11 @@ export const nookApi = {
     }),
 
   memberWorldIdConfig: () => request<WorldIdMemberConfig>('/v1/world-id/member/config'),
+
+  memberWorldIdStatus: (profileId: string) =>
+    request<WorldIdMemberStatus>(
+      `/v1/world-id/member/status?profileId=${encodeURIComponent(profileId)}`,
+    ),
 
   createMemberWorldIdRpContext: () =>
     request<WorldIdRpContext>('/v1/world-id/member/rp-signature', {

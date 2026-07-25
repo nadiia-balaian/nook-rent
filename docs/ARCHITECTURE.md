@@ -241,6 +241,10 @@ financial authority.
 - The API creates the signed RP context and keeps its signing key server-side.
 - World verifies the profile-bound Proof of Human on the API.
 - Supabase stores the action-specific nullifier privately to prevent reuse.
+- Host and Guest are roles of one Member profile, so changing roles reuses the
+  same successful Member verification.
+- On restart, the browser asks the API for a boolean profile verification status
+  and resumes the verified Member without requesting the same World action again.
 - After direct Member verification, Guest onboarding performs live AgentBook
   and Agent0 capability checks, then shows only compact verified badges.
 - The browser asks the server-side Guest Agent to perform the protected action.

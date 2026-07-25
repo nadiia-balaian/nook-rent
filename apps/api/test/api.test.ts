@@ -221,6 +221,32 @@ describe('Nook API', () => {
     expect(JSON.stringify(config.json())).not.toContain('signing');
   });
 
+  it('restores an existing World ID Member verification without exposing its nullifier', async () => {
+    const application = createApi({
+      memberWorldId: verifiedMemberWorldId(),
+      worldIdVerifications: {
+        isVerified: () => Promise.resolve(true),
+        record: () => Promise.reject(new Error('unused')),
+      },
+    });
+    applications.push(application);
+
+    const response = await application.inject({
+      method: 'GET',
+      url: `/v1/world-id/member/status?profileId=${hostProfileId}`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      provider: 'world_id',
+      credential: 'proof_of_human',
+      humanVerified: true,
+      environment: 'staging',
+      status: 'existing',
+    });
+    expect(JSON.stringify(response.json())).not.toContain('nullifier');
+  });
+
   it('verifies and stores a profile-bound World ID Member proof without exposing its nullifier', async () => {
     let stored: { profileId: string; nullifierDecimal: string } | undefined;
     const application = createApi({
