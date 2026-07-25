@@ -1,6 +1,6 @@
 # Nook.rent architecture
 
-Status: Phase 3 marketplace API implemented; sponsor flows remain planned
+Status: Phase 4 marketplace UI implemented; sponsor flows remain planned
 
 ## Principles
 
@@ -57,7 +57,10 @@ supabase/
 ### `apps/web`
 
 Renders public Listings, search, Booking status, Host review, and sponsor
-evidence. It communicates only with the API.
+evidence. It communicates only with the API. The current tracer supports Host
+and Guest demo roles, both approval paths, Listing draft confirmation, and
+explicit operational states. It does not hold provider credentials or make
+financial or authorization decisions.
 
 ### `apps/api`
 

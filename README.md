@@ -41,7 +41,7 @@ rental behavior.
 
 ## Repository status
 
-Phases 1–3 are implemented:
+Phases 1–4 are implemented:
 
 - `pnpm` TypeScript monorepo and shared quality gate;
 - Fastify API shell with a tested health endpoint;
@@ -59,6 +59,12 @@ Phases 1–3 are implemented:
   Reservation Holds, Host decisions, and Booking status;
 - stable request IDs and error envelopes;
 - pseudonymous seed data for two Lisbon Listings and both approval paths.
+- responsive Guest and Host demo desks;
+- search, quote, automatic approval, manual Host review, and Booking status UI;
+- Host-controlled Listing draft and publish flow;
+- explicit loading, unavailable, empty, expired, rejected, and failed states;
+- an evidence panel that distinguishes implemented and planned integrations;
+- browser-level tests for both approval paths.
 
 The two database migrations are applied to the isolated `nook` schema in hosted
 Supabase. Demo seed data has not been inserted into the hosted database.
@@ -96,17 +102,20 @@ docs/
 
 No credentials or private signing material belong in this repository.
 
-## Run the API
+## Run the marketplace
 
 With `SUPABASE_DB_URL` configured in the root `.env`:
 
 ```text
-pnpm dev:api
+pnpm dev
 ```
 
-The API exposes `/health`, `/ready`, and the Phase 3 marketplace routes under
-`/v1`. Running `pnpm supabase:seed-demo` is an explicit database write and
-should be used only against the intended demo environment.
+This starts the API and web application together. The API exposes `/health`,
+`/ready`, and the marketplace routes under `/v1`. The web application uses
+`VITE_API_URL`, or `http://localhost:3100` when it is not set.
+
+Running `pnpm supabase:seed-demo` is an explicit database write and should be
+used only against the intended demo environment.
 
 ## Working agreement
 

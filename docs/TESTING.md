@@ -67,10 +67,14 @@ Exercise the deployed web and API:
 - expired hold releases dates;
 - evidence links render.
 
-The current Phase 3 integration suite already exercises the API portion through
+The current Phase 3 integration suite exercises the API portion through
 Listing publication, search, deterministic quote creation, atomic hold,
 automatic approval, Host review, Host decision, idempotent retry, and
 conflicting-date rejection.
+
+The Phase 4 browser-component suite exercises API readiness, Guest/Host role
+switching, search and quote presentation, automatic approval, Newcomer Host
+review, and the explicit Host decision handoff.
 
 ## Required negative cases
 

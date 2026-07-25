@@ -1,0 +1,225 @@
+// @vitest-environment jsdom
+
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+
+import { App } from './App.js';
+import type { BookingQuote, Listing, ReservationResult } from './api.js';
+
+const listing: Listing = {
+  id: '30000000-0000-4000-8000-000000000001',
+  hostProfileId: '10000000-0000-4000-8000-000000000001',
+  title: 'Calm Alfama room near the river',
+  description: 'A bright room with a desk, fast Wi-Fi, and a quiet courtyard.',
+  city: 'Lisbon',
+  neighborhood: 'Alfama',
+  approximateLocationRef: 'lisbon-alfama-demo-area',
+  amenities: ['wifi', 'desk'],
+  houseRules: ['No smoking'],
+  settlementTokenId: '0.0.12345',
+  nightlyRateAtomic: '10000',
+  baseDepositAtomic: '50000',
+  maxGuests: 2,
+  status: 'published',
+  createdAt: '2026-07-25T10:00:00.000Z',
+  updatedAt: '2026-07-25T10:00:00.000Z',
+};
+
+const quote: BookingQuote = {
+  id: '40000000-0000-4000-8000-000000000001',
+  listingId: listing.id,
+  guestProfileId: '20000000-0000-4000-8000-000000000001',
+  checkIn: '2026-08-20',
+  checkOut: '2026-08-25',
+  nights: 5,
+  settlementTokenId: '0.0.12345',
+  nightlyRateAtomic: '10000',
+  staySubtotalAtomic: '50000',
+  baseDepositAtomic: '50000',
+  quotedDepositAtomic: '50000',
+  totalDueAtomic: '100000',
+  reputationTier: 'silver',
+  expiresAt: '2099-08-20T10:15:00.000Z',
+  createdAt: '2026-07-25T10:00:00.000Z',
+};
+
+function reservation(mode: 'automatic' | 'manual'): ReservationResult {
+  const manual = mode === 'manual';
+
+  return {
+    status: 'created',
+    hold: {
+      id: '50000000-0000-4000-8000-000000000001',
+      listingId: listing.id,
+      guestProfileId: manual ? '20000000-0000-4000-8000-000000000002' : quote.guestProfileId,
+      quoteId: quote.id,
+      checkIn: quote.checkIn,
+      checkOut: quote.checkOut,
+      nights: quote.nights,
+      status: 'active',
+      expiresAt: '2099-08-20T10:15:00.000Z',
+      createdAt: '2026-07-25T10:00:00.000Z',
+      updatedAt: '2026-07-25T10:00:00.000Z',
+    },
+    bookingRequest: {
+      id: '60000000-0000-4000-8000-000000000001',
+      holdId: '50000000-0000-4000-8000-000000000001',
+      listingId: listing.id,
+      guestProfileId: manual ? '20000000-0000-4000-8000-000000000002' : quote.guestProfileId,
+      approvalResult: manual ? 'host_review' : 'auto_approved',
+      policyVersion: 1,
+      status: manual ? 'pending' : 'approved',
+      createdAt: '2026-07-25T10:00:00.000Z',
+      updatedAt: '2026-07-25T10:00:00.000Z',
+    },
+    booking: {
+      id: '70000000-0000-4000-8000-000000000001',
+      listingId: listing.id,
+      hostProfileId: listing.hostProfileId,
+      guestProfileId: manual ? '20000000-0000-4000-8000-000000000002' : quote.guestProfileId,
+      quoteId: quote.id,
+      holdId: '50000000-0000-4000-8000-000000000001',
+      checkIn: quote.checkIn,
+      checkOut: quote.checkOut,
+      nights: quote.nights,
+      settlementTokenId: quote.settlementTokenId,
+      staySubtotalAtomic: quote.staySubtotalAtomic,
+      depositAmountAtomic: quote.quotedDepositAtomic,
+      status: manual ? 'approval_pending' : 'awaiting_deposit',
+      createdAt: '2026-07-25T10:00:00.000Z',
+      updatedAt: '2026-07-25T10:00:00.000Z',
+    },
+    approval: manual
+      ? {
+          status: 'host_review',
+          reason: 'rental_reputation_below_minimum',
+        }
+      : { status: 'auto_approved' },
+  };
+}
+
+function jsonResponse(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'content-type': 'application/json' },
+  });
+}
+
+function installMarketplaceApi(mode: 'automatic' | 'manual') {
+  const initialReservation = reservation(mode);
+
+  vi.stubGlobal(
+    'fetch',
+    vi.fn((input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+      const rawUrl =
+        typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      const url = new URL(rawUrl);
+
+      if (url.pathname === '/ready') {
+        return Promise.resolve(jsonResponse({ service: 'nook-api', status: 'ready' }));
+      }
+      if (url.pathname === '/v1/listings' && (!init?.method || init.method === 'GET')) {
+        return Promise.resolve(jsonResponse({ items: [listing] }));
+      }
+      if (url.pathname === '/v1/booking-quotes') {
+        return Promise.resolve(
+          jsonResponse({
+            ...quote,
+            guestProfileId: initialReservation.booking.guestProfileId,
+            reputationTier: mode === 'manual' ? 'newcomer' : 'silver',
+          }),
+        );
+      }
+      if (url.pathname === '/v1/reservation-holds') {
+        return Promise.resolve(jsonResponse(initialReservation));
+      }
+      if (url.pathname.endsWith('/decision')) {
+        return Promise.resolve(
+          jsonResponse({
+            bookingRequest: {
+              ...initialReservation.bookingRequest,
+              approvalResult: 'approved',
+              status: 'approved',
+            },
+            booking: {
+              ...initialReservation.booking,
+              status: 'awaiting_deposit',
+            },
+            hold: initialReservation.hold,
+          }),
+        );
+      }
+
+      return Promise.resolve(
+        jsonResponse(
+          {
+            error: {
+              code: 'test_route_missing',
+              message: `No test response for ${url.pathname}`,
+              requestId: 'test-request',
+            },
+          },
+          404,
+        ),
+      );
+    }),
+  );
+}
+
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
+
+describe('Nook marketplace demo', () => {
+  it('shows API readiness and switches between the Guest and Host desks', async () => {
+    installMarketplaceApi('automatic');
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    expect(await screen.findByText('Marketplace ready')).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Host desk' }));
+    expect(screen.getByRole('heading', { name: 'Welcome back, Maria.' })).toBeTruthy();
+    expect(screen.getByText('Review queue is clear')).toBeTruthy();
+  });
+
+  it('completes the automatic approval path from search to status', async () => {
+    installMarketplaceApi('automatic');
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await user.click(screen.getByRole('button', { name: 'Show available homes' }));
+    expect(await screen.findByText(listing.title)).toBeTruthy();
+
+    await user.click(screen.getByRole('button', { name: 'View quote' }));
+    expect(await screen.findByRole('heading', { name: 'Review the exact terms' })).toBeTruthy();
+
+    await user.click(screen.getByRole('button', { name: 'Reserve these dates' }));
+    expect(await screen.findByRole('heading', { name: 'Approved—deposit is next' })).toBeTruthy();
+    expect(screen.getByText(/Hedera escrow arrives in Phase 5/)).toBeTruthy();
+  });
+
+  it('hands a Newcomer request to the Host for an explicit decision', async () => {
+    installMarketplaceApi('manual');
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await user.click(screen.getByRole('button', { name: /Jo/ }));
+    await user.click(screen.getByRole('button', { name: 'Show available homes' }));
+    await user.click(await screen.findByRole('button', { name: 'View quote' }));
+    await user.click(await screen.findByRole('button', { name: 'Reserve these dates' }));
+
+    expect(await screen.findByRole('heading', { name: 'Waiting for Maria' })).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Open Host review' }));
+    expect(screen.getByRole('heading', { name: 'Jo wants to stay' })).toBeTruthy();
+
+    await user.click(screen.getByRole('button', { name: 'Approve request' }));
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'Request approved' })).toBeTruthy();
+    });
+  });
+});

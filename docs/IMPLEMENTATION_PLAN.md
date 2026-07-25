@@ -1,6 +1,6 @@
 # Nook.rent implementation plan
 
-Status: active; Phases 0–3 implemented
+Status: active; Phases 0–4 implemented
 Strategy: build one end-to-end tracer bullet, then deepen it
 
 ## Completion rule
@@ -137,6 +137,8 @@ works locally without AI or blockchain dependencies.
 ## Phase 4: minimal marketplace UI
 
 Estimate: 4–7 focused hours
+
+Status: implemented locally on 2026-07-25
 
 Implement:
 
@@ -332,12 +334,11 @@ Provider access or registration delays may add time.
 
 ## Next coding task
 
-Continue with Phase 4 after committing the persistence and API work:
+Continue with Phase 5 after committing the marketplace UI tracer:
 
 ```text
-feat: add marketplace UI tracer
+feat: add Hedera financial tracer
 ```
 
-That commit should make the automatic-approval and Host-review paths usable
-without API documentation, including explicit loading, unavailable, conflict,
-expired, and failure states.
+That phase should turn one approved Booking into a real, idempotent Hedera
+Testnet financial operation with Mirror Node read-back and HCS evidence.

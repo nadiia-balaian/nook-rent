@@ -6,7 +6,7 @@ export default defineConfig({
       enabled: false,
       provider: 'v8',
     },
-    include: ['apps/**/*.test.ts', 'packages/**/*.test.ts'],
+    include: ['apps/**/*.test.ts', 'apps/**/*.test.tsx', 'packages/**/*.test.ts'],
     fileParallelism: false,
     passWithNoTests: false,
   },
