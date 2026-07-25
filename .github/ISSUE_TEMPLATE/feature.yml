@@ -1,0 +1,41 @@
+name: Feature
+description: Propose one independently deliverable Nook.rent capability.
+title: "feat: "
+labels:
+  - enhancement
+body:
+  - type: textarea
+    id: outcome
+    attributes:
+      label: User outcome
+      description: What can a Host or Guest do after this is complete?
+    validations:
+      required: true
+  - type: textarea
+    id: rules
+    attributes:
+      label: Domain rules
+      description: List affected invariants, state transitions, and policy.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: Provide observable success and failure cases.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Sponsor evidence
+      description: Identify live evidence required, or write "None."
+    validations:
+      required: true
+  - type: textarea
+    id: safety
+    attributes:
+      label: Security and privacy
+      description: Identify secrets, identity, financial, or public-data risks.
+    validations:
+      required: true

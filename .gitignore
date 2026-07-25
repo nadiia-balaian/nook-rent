@@ -1,0 +1,37 @@
+# dependencies
+node_modules/
+
+# build output
+dist/
+build/
+.turbo/
+.vite/
+coverage/
+
+# environment and secrets
+.env
+.env.*
+!.env.example
+
+# deployment
+.vercel/
+
+# logs
+*.log
+pnpm-debug.log*
+
+# local tools
+.idea/
+.vscode/
+*.swp
+
+# operating system
+.DS_Store
+
+# test artifacts
+test-results/
+playwright-report/
+
+# generated provider evidence
+artifacts/
+evidence/
