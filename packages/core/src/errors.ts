@@ -42,3 +42,24 @@ export class HumanBackedAuthorizationError extends Error {
     this.name = 'HumanBackedAuthorizationError';
   }
 }
+
+export class OnchainSignalProviderError extends Error {
+  constructor(
+    readonly reason: 'provider_unavailable' | 'provider_timeout' | 'invalid_provider_response',
+    message: string,
+  ) {
+    super(message);
+    this.name = 'OnchainSignalProviderError';
+  }
+}
+
+export class AgentRegistrationError extends Error {
+  constructor(
+    readonly reason:
+      'agent_not_registered' | 'agent_registration_inactive' | 'agent_capability_missing',
+    message: string,
+  ) {
+    super(message);
+    this.name = 'AgentRegistrationError';
+  }
+}

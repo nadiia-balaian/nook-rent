@@ -17,6 +17,8 @@
     "dev:worker": "pnpm --filter @nook-rent/worker dev",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
+    "graph:agent-register": "pnpm --filter @nook-rent/the-graph graph:agent-register",
+    "graph:agent-status": "pnpm --filter @nook-rent/the-graph graph:agent-status",
     "hedera:preflight": "pnpm --filter @nook-rent/hedera hedera:preflight",
     "hedera:setup": "pnpm --filter @nook-rent/hedera hedera:setup",
     "lint": "eslint .",

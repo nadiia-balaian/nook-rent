@@ -100,6 +100,19 @@ function reservation(mode: 'automatic' | 'manual'): ReservationResult {
       provider: 'world_agentkit',
       humanBacked: true,
     },
+    onchainSignal: {
+      provider: 'the_graph',
+      subgraph: 'agent0',
+      network: 'base-sepolia',
+      chainId: 84_532,
+      subgraphId: '4yYAvQLFjBhBtdRCY7eUWo181VNoTSLLFd5M7FXQAi6u',
+      sourceRef: 'the-graph:agent0:base-sepolia:4yYAvQLFjBhBtdRCY7eUWo181VNoTSLLFd5M7FXQAi6u',
+      registered: true,
+      active: true,
+      binding: 'agent_wallet',
+      requiredCapability: 'nook.rent:reservation-hold',
+      capabilityPresent: true,
+    },
   };
 }
 
@@ -266,6 +279,8 @@ describe('Nook marketplace demo', () => {
     await user.click(screen.getByRole('button', { name: 'Reserve these dates' }));
     expect(await screen.findByRole('heading', { name: 'Approved—deposit is next' })).toBeTruthy();
     expect(screen.getByText('Verified this hold')).toBeTruthy();
+    expect(screen.getByText('Live this hold')).toBeTruthy();
+    expect(screen.getByText(/Agent0 on base-sepolia/)).toBeTruthy();
 
     await user.click(screen.getByRole('button', { name: 'Fund Testnet deposit' }));
     expect(

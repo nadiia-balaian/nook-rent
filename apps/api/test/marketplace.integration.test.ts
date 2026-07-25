@@ -76,6 +76,21 @@ describeWithDatabase('marketplace API tracer', () => {
           }),
       },
       worldResourceUri: 'https://api.nook.rent/v1/reservation-holds',
+      agentRegistrationSignals: {
+        getAgentRegistration: (agentAddress) =>
+          Promise.resolve({
+            active: true,
+            agentAddress,
+            operatorAddresses: [],
+            capabilities: ['nook.rent:reservation-hold'],
+            sourceRef: 'the-graph:agent0:base-sepolia:test-subgraph',
+            chainId: 84_532,
+            subgraphId: 'test-subgraph',
+            network: 'base-sepolia',
+            binding: 'agent_wallet',
+          }),
+      },
+      requiredAgentCapability: 'nook.rent:reservation-hold',
       readiness: async () => {
         await sql`select 1`;
       },
@@ -163,6 +178,14 @@ describeWithDatabase('marketplace API tracer', () => {
       approval: { status: 'auto_approved' },
       bookingRequest: { status: 'approved' },
       booking: { status: 'awaiting_deposit' },
+      onchainSignal: {
+        provider: 'the_graph',
+        subgraph: 'agent0',
+        network: 'base-sepolia',
+        registered: true,
+        active: true,
+        capabilityPresent: true,
+      },
     });
     expect(retryResponse.statusCode).toBe(200);
     expect(retryResponse.json()).toMatchObject({

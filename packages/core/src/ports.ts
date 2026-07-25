@@ -116,6 +116,10 @@ export interface AgentRegistrationSignal {
   operatorAddresses: string[];
   capabilities: string[];
   sourceRef: string;
+  chainId: number;
+  subgraphId: string;
+  network: string;
+  binding: 'agent_wallet' | 'operator' | 'owner';
 }
 
 export interface OnchainSignalPort {

@@ -1,0 +1,15 @@
+{
+  "type": "https://eips.ethereum.org/EIPS/eip-8004#registration-v1",
+  "name": "Nook.rent Guest Agent",
+  "description": "Finds valid temporary stays and requests human-backed reservation holds under stored Nook.rent policy.",
+  "services": [
+    {
+      "name": "Nook.rent",
+      "endpoint": "https://api.nook.rent/v1/reservation-holds",
+      "version": "1.0.0",
+      "capabilities": ["listing-search", "reservation-hold"]
+    }
+  ],
+  "active": true,
+  "x402Support": false
+}

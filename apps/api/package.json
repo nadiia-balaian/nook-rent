@@ -14,6 +14,7 @@
     "@nook-rent/core": "workspace:*",
     "@nook-rent/hedera": "workspace:*",
     "@nook-rent/supabase": "workspace:*",
+    "@nook-rent/the-graph": "workspace:*",
     "@nook-rent/world": "workspace:*",
     "fastify": "5.10.0",
     "zod": "4.4.3"

@@ -41,8 +41,8 @@ rental behavior.
 
 ## Repository status
 
-Phases 1–6 are implemented. The Hedera tracer and World AgentKit authorization
-have both produced verified live evidence:
+Phases 1–6 are complete and Phase 7 is implemented locally. The Hedera tracer
+and World AgentKit authorization have both produced verified live evidence:
 
 - `pnpm` TypeScript monorepo and shared quality gate;
 - Fastify API shell with a tested health endpoint;
@@ -76,6 +76,13 @@ have both produced verified live evidence:
 - persistent World nonce replay defense and a one-active-hold-per-human limit;
 - atomic human-backed authorization and Reservation Hold creation;
 - safe browser evidence that reveals no Agent or World identifier.
+- direct Agent0 queries through The Graph on Base Sepolia;
+- active registration, signing-wallet/owner/operator binding, and named booking
+  capability enforcement;
+- fail-closed Graph provider behavior with a short safe cache;
+- guarded Agent0 registration and live status commands;
+- safe browser evidence that never reveals the Graph key, raw response, or
+  signing wallet.
 
 The first five database migrations are applied to the isolated `nook` schema in
 hosted Supabase. The pseudonymous demo seed contains three profiles, two Lisbon
@@ -115,6 +122,8 @@ docs/
    resource evidence.
 7. Follow [docs/WORLD_AGENTKIT.md](./docs/WORLD_AGENTKIT.md) for the protected
    Guest Agent flow.
+8. Follow [docs/THE_GRAPH_AGENT0.md](./docs/THE_GRAPH_AGENT0.md) to register and
+   verify the same Agent through The Graph.
 
 No credentials or private signing material belong in this repository.
 

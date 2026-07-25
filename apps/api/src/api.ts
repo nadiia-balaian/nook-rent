@@ -1,5 +1,7 @@
 import cors from '@fastify/cors';
 import {
+  AgentRegistrationError,
+  type AgentRegistrationSignal,
   DomainConflictError,
   DomainValidationError,
   HumanBackedAuthorizationError,
@@ -12,6 +14,8 @@ import {
   type Listing,
   type ListingDetail,
   type MarketplaceService,
+  type OnchainSignalPort,
+  OnchainSignalProviderError,
   type ReservationHold,
   ResourceNotFoundError,
   StayRange,
@@ -31,6 +35,8 @@ export interface CreateApiOptions {
     createChallenge(): object;
   };
   worldResourceUri?: string;
+  agentRegistrationSignals?: OnchainSignalPort;
+  requiredAgentCapability?: string;
   readiness?: () => Promise<void>;
 }
 
@@ -157,6 +163,58 @@ function requireHumanBackedAuthorization(
   }
 
   return { authorization, resourceUri };
+}
+
+async function requireAgentRegistration(input: {
+  signals: OnchainSignalPort | undefined;
+  requiredCapability: string | undefined;
+  agentAddress: string;
+}): Promise<AgentRegistrationSignal> {
+  if (!input.signals || !input.requiredCapability) {
+    throw new OnchainSignalProviderError(
+      'provider_unavailable',
+      'The Graph Agent0 registration check is not configured',
+    );
+  }
+
+  const signal = await input.signals.getAgentRegistration(input.agentAddress);
+
+  if (!signal) {
+    throw new AgentRegistrationError(
+      'agent_not_registered',
+      'The signing Agent wallet is not registered in Agent0',
+    );
+  }
+  if (!signal.active) {
+    throw new AgentRegistrationError(
+      'agent_registration_inactive',
+      'The Agent0 registration is not active',
+    );
+  }
+  if (!signal.capabilities.includes(input.requiredCapability)) {
+    throw new AgentRegistrationError(
+      'agent_capability_missing',
+      `The Agent0 registration does not advertise ${input.requiredCapability}`,
+    );
+  }
+
+  return signal;
+}
+
+function graphSignalDto(signal: AgentRegistrationSignal, requiredCapability: string) {
+  return {
+    provider: 'the_graph' as const,
+    subgraph: 'agent0' as const,
+    network: signal.network,
+    chainId: signal.chainId,
+    subgraphId: signal.subgraphId,
+    sourceRef: signal.sourceRef,
+    registered: true as const,
+    active: true as const,
+    binding: signal.binding,
+    requiredCapability,
+    capabilityPresent: true as const,
+  };
 }
 
 function stayRangeDto(stayRange: StayRange) {
@@ -419,6 +477,11 @@ export function createApi(options: CreateApiOptions = {}): FastifyInstance {
       header: agentkitHeader,
       resourceUri: world.resourceUri,
     });
+    const graphSignal = await requireAgentRegistration({
+      signals: options.agentRegistrationSignals,
+      requiredCapability: options.requiredAgentCapability,
+      agentAddress: authorization.agentAddress,
+    });
     const result = await requireMarketplace(options.marketplace, request).requestReservation({
       requestId: idempotencyKey,
       quoteId: input.quoteId,
@@ -441,6 +504,7 @@ export function createApi(options: CreateApiOptions = {}): FastifyInstance {
         provider: 'world_agentkit',
         humanBacked: true,
       },
+      onchainSignal: graphSignalDto(graphSignal, options.requiredAgentCapability ?? 'unconfigured'),
     });
   });
 
@@ -519,6 +583,14 @@ export function createApi(options: CreateApiOptions = {}): FastifyInstance {
 
       if (error instanceof HumanBackedAuthorizationError) {
         return reply.code(403).send(errorEnvelope(request, error.reason, error.message));
+      }
+
+      if (error instanceof AgentRegistrationError) {
+        return reply.code(403).send(errorEnvelope(request, error.reason, error.message));
+      }
+
+      if (error instanceof OnchainSignalProviderError) {
+        return reply.code(503).send(errorEnvelope(request, error.reason, error.message));
       }
 
       if (error instanceof DomainConflictError || error instanceof InvalidStateTransitionError) {

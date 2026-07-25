@@ -110,6 +110,14 @@ tests prove application behavior. The opt-in live exit run additionally proved
 Agent registration, AgentBook lookup on World Chain, protected Hold creation,
 fresh-nonce idempotent retry, and rejection of a second concurrent Hold.
 
+The Phase 7 adapter suite verifies the exact Agent0 response mapping, wallet
+binding, named capability extraction, cache behavior, absent registrations,
+malformed registration metadata, GraphQL failures, and provider timeouts. API
+tests prove that the protected hold fails closed when Graph is unconfigured,
+unavailable, unregistered, inactive, or missing the required capability. UI
+tests prove that only safe named Graph evidence is displayed. These are local
+controlled tests and do not count as live Graph evidence.
+
 ## Required negative cases
 
 - stay shorter than 3 nights;

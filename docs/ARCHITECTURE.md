@@ -1,7 +1,7 @@
 # Nook.rent architecture
 
-Status: Phase 5 Hedera tracer complete with hosted state and live Testnet
-deposit/HCS evidence
+Status: Phase 7 The Graph gate implemented locally; live Agent0 registration
+and Graph evidence pending
 
 ## Principles
 
@@ -206,9 +206,14 @@ financial and authorization parameters from stored state.
 ## The Graph architecture
 
 - Query a live Graph gateway endpoint using a server-side API key.
-- The baseline uses the Agent0 ERC-8004 Subgraph on a supported test network.
+- The baseline uses the Agent0 ERC-8004 Subgraph on Base Sepolia.
+- Query the human-backed signing wallet as Agent wallet, registry owner, and
+  operator.
+- Require an active registration advertising
+  `nook.rent:reservation-hold` before creating a protected hold.
 - Normalize provider responses into explicit Onchain Signal values.
 - Fail closed for protected Agent registration checks.
+- Cache the normalized result briefly; never cache past the configured expiry.
 - Do not expose the API key or raw provider response to the browser.
 - Do not convert arbitrary wallet activity into Rental Reputation.
 
@@ -250,9 +255,8 @@ model, not a production custody design.
 - Nook.rent tables must not depend on unrelated application tables.
 
 The schema and repositories are implemented and tested against local
-PostgreSQL. The first three migrations are applied to the isolated hosted
-`nook` schema. The Phase 6 World authorization migration is locally verified
-and remains an explicit hosted write.
+PostgreSQL. The first five migrations, including the World authorization and
+idempotent-retry changes, are applied to the isolated hosted `nook` schema.
 
 ## Deployment shape
 

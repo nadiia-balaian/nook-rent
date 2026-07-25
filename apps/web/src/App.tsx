@@ -113,6 +113,16 @@ function friendlyError(error: NookApiError): string {
       return 'This verified human already has an active hold. Complete or release it before holding another home.';
     case 'world_unavailable':
       return 'World AgentKit is not configured on the API yet.';
+    case 'agent_not_registered':
+      return 'This human-backed Agent is not registered in the Agent0 registry yet.';
+    case 'agent_registration_inactive':
+      return 'This Agent0 registration is inactive.';
+    case 'agent_capability_missing':
+      return 'This Agent0 registration does not advertise the Nook.rent reservation capability.';
+    case 'provider_timeout':
+    case 'provider_unavailable':
+    case 'invalid_provider_response':
+      return 'The live Agent0 query through The Graph is temporarily unavailable. No dates were held.';
     default:
       return error.message || 'Something went wrong. Please try again.';
   }
@@ -1384,6 +1394,7 @@ function EvidencePanel({
 }) {
   const hederaLive = deposit?.operation.status === 'confirmed';
   const worldVerified = reservation?.authorization?.humanBacked === true;
+  const graphVerified = reservation?.onchainSignal?.capabilityPresent === true;
   const evidence = [
     {
       icon: <Database size={18} />,
@@ -1403,9 +1414,12 @@ function EvidencePanel({
     {
       icon: <Network size={18} />,
       name: 'The Graph',
-      status: 'Phase 7',
-      tone: 'planned',
-      detail: 'Live Agent registration and booking capability signals',
+      status: graphVerified ? 'Live this hold' : 'Checked at hold',
+      tone: graphVerified ? 'live' : 'ready',
+      detail:
+        graphVerified && reservation?.onchainSignal
+          ? `Agent0 on ${reservation.onchainSignal.network}; active registration and ${reservation.onchainSignal.requiredCapability}`
+          : 'Server-side Agent0 registration, signing-wallet binding, and booking-capability check',
     },
     {
       icon: <Coins size={18} />,

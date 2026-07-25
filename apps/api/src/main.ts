@@ -22,6 +22,7 @@ import {
   PostgresRentalReputationRepository,
   PostgresReservationHoldRepository,
 } from '@nook-rent/supabase';
+import { Agent0GraphClient, parseOptionalGraphEnvironment } from '@nook-rent/the-graph';
 import {
   parseOptionalWorldVerifierEnvironment,
   WorldAgentkitAuthorization,
@@ -54,6 +55,10 @@ const hederaEnvironment = parseOptionalHederaEnvironment(process.env);
 const worldEnvironment = parseOptionalWorldVerifierEnvironment(process.env);
 const humanBackedAuthorization = worldEnvironment
   ? new WorldAgentkitAuthorization(worldEnvironment)
+  : undefined;
+const graphEnvironment = parseOptionalGraphEnvironment(process.env);
+const agentRegistrationSignals = graphEnvironment
+  ? new Agent0GraphClient(graphEnvironment)
   : undefined;
 const hederaClient = hederaEnvironment ? createHederaClient(hederaEnvironment) : undefined;
 const deposits =
@@ -90,6 +95,12 @@ const app = createApi({
     ? {
         humanBackedAuthorization,
         worldResourceUri: worldEnvironment.resourceUri,
+      }
+    : {}),
+  ...(agentRegistrationSignals && graphEnvironment
+    ? {
+        agentRegistrationSignals,
+        requiredAgentCapability: graphEnvironment.requiredCapability,
       }
     : {}),
   readiness: async () => {

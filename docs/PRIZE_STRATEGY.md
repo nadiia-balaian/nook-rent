@@ -132,8 +132,10 @@ The Graph does not calculate Rental Reputation.
 
 The existing Agent0 Subgraph is documented at
 [The Graph Agent0 documentation](https://thegraph.com/docs/en/subgraphs/existing-subgraphs/agent0/).
-Use a currently deployed network and verify its live schema before
-implementation.
+The selected deployment is Base Sepolia (`84532`), Subgraph ID
+`4yYAvQLFjBhBtdRCY7eUWo181VNoTSLLFd5M7FXQAi6u`. Nook.rent requires an active
+registration bound to the human-backed signing wallet and the named
+`nook.rent:reservation-hold` capability.
 
 ### Not targeted
 

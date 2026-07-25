@@ -148,6 +148,19 @@ export interface ReservationResult {
     provider: 'world_agentkit';
     humanBacked: true;
   };
+  onchainSignal?: {
+    provider: 'the_graph';
+    subgraph: 'agent0';
+    network: string;
+    chainId: number;
+    subgraphId: string;
+    sourceRef: string;
+    registered: true;
+    active: true;
+    binding: 'agent_wallet' | 'operator' | 'owner';
+    requiredCapability: string;
+    capabilityPresent: true;
+  };
 }
 
 export interface DepositResult {

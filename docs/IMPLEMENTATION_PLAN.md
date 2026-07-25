@@ -1,6 +1,6 @@
 # Nook.rent implementation plan
 
-Status: active; Phases 0–5 implemented
+Status: active; Phases 0–6 complete, Phase 7 implemented locally
 Strategy: build one end-to-end tracer bullet, then deepen it
 
 ## Completion rule
@@ -255,6 +255,9 @@ Local evidence:
 
 Estimate: 3–5 focused hours
 
+Status: implemented locally on 2026-07-25; live Graph credentials and Agent0
+registration remain the exit check.
+
 Implement:
 
 - server-side Graph gateway client;
@@ -270,6 +273,27 @@ Exit check:
 - the Agent reasons or acts on a live Graph response;
 - mocked responses are used only by local tests;
 - the demo identifies the endpoint and Subgraph ID.
+
+Implemented locally:
+
+- direct server-side query of the Agent0 Base Sepolia Subgraph;
+- signing-wallet, owner, and operator binding;
+- active-registration and named booking-capability enforcement;
+- fail-closed provider, timeout, malformed-response, missing-registration,
+  inactive-registration, and missing-capability behavior;
+- short-lived result cache;
+- safe API and UI evidence without addresses, API keys, or raw responses;
+- guarded one-time Base Sepolia registration helper and public ERC-8004
+  document;
+- live status command and deterministic adapter/API/UI tests.
+
+Remaining live exit:
+
+- configure a server-only Graph API key;
+- deploy the public registration document;
+- register the existing World Guest Agent wallet on Base Sepolia;
+- verify the indexed registration with `pnpm graph:agent-status`;
+- create one protected live hold and capture safe evidence.
 
 ## Phase 8: constrained AI Agents
 
@@ -376,11 +400,11 @@ Provider access or registration delays may add time.
 
 ## Next coding task
 
-Continue with Phase 5 after committing the marketplace UI tracer:
+Complete the Phase 7 live exit, then continue with Phase 8:
 
 ```text
-feat: add Hedera financial tracer
+feat: add constrained marketplace agents
 ```
 
-That phase should turn one approved Booking into a real, idempotent Hedera
-Testnet financial operation with Mirror Node read-back and HCS evidence.
+Phase 8 adds the Host Listing Agent and Guest matching Agent while keeping all
+availability, approval, and financial decisions deterministic.

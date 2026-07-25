@@ -7,9 +7,17 @@
     ".": "./src/index.ts"
   },
   "scripts": {
+    "graph:agent-register": "node --env-file-if-exists=../../.env --import tsx src/register-cli.ts",
+    "graph:agent-status": "node --env-file-if-exists=../../.env --import tsx src/status-cli.ts",
+    "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
-    "@nook-rent/core": "workspace:*"
+    "@nook-rent/core": "workspace:*",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "tsx": "4.23.1",
+    "viem": "2.55.8"
   }
 }
