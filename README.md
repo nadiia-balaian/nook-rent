@@ -41,9 +41,8 @@ rental behavior.
 
 ## Repository status
 
-Phases 1–5 are implemented and the Hedera tracer has verified live evidence.
-Phase 6 World AgentKit authorization is implemented locally; its hosted
-migration, Agent registration, and live proof remain explicit owner-run steps:
+Phases 1–6 are implemented. The Hedera tracer and World AgentKit authorization
+have both produced verified live evidence:
 
 - `pnpm` TypeScript monorepo and shared quality gate;
 - Fastify API shell with a tested health endpoint;
@@ -78,10 +77,9 @@ migration, Agent registration, and live proof remain explicit owner-run steps:
 - atomic human-backed authorization and Reservation Hold creation;
 - safe browser evidence that reveals no Agent or World identifier.
 
-The first three database migrations are applied to the isolated `nook` schema
-in hosted Supabase. The Phase 6 migration is locally verified and awaits an
-explicit hosted write. The pseudonymous demo seed contains three profiles, two
-Lisbon Listings with the Nook.rent HTS token, and their availability windows.
+The first five database migrations are applied to the isolated `nook` schema in
+hosted Supabase. The pseudonymous demo seed contains three profiles, two Lisbon
+Listings with the Nook.rent HTS token, and their availability windows.
 
 Monorepo layout:
 

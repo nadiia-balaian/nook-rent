@@ -220,8 +220,7 @@ Completed exit evidence:
 
 Estimate: 4–7 focused hours
 
-Status: locally implemented on 2026-07-25. Hosted migration, Agent wallet
-registration, and the live World proof remain explicit owner-run actions.
+Status: completed and verified live on 2026-07-25.
 
 Implement:
 
@@ -246,6 +245,11 @@ Local evidence:
 - real PostgreSQL tests prove idempotent retry, nonce rejection, and the
   one-active-hold limit;
 - the API returns only a boolean human-backed evidence state to the browser.
+- the Agent wallet is registered in AgentBook on World Chain;
+- an unsigned live request returned the AgentKit `402` challenge;
+- the registered Guest Agent created an auto-approved Reservation Hold;
+- a fresh-nonce retry returned the same Hold without duplication;
+- a second concurrent Hold from the same verified human was rejected.
 
 ## Phase 7: The Graph live Agent signals
 

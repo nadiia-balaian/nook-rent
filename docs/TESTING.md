@@ -106,8 +106,9 @@ challenge and signed retry protocol. Controlled verifier dependencies cover
 invalid and unverified Agent outcomes without sending World proofs over the
 network. The real PostgreSQL suite atomically verifies nonce replay rejection,
 one active Hold per anonymous human, Agent binding, and idempotent retry. These
-tests prove application behavior; the owner-run Agent registration and live
-AgentBook lookup are still required sponsor evidence.
+tests prove application behavior. The opt-in live exit run additionally proved
+Agent registration, AgentBook lookup on World Chain, protected Hold creation,
+fresh-nonce idempotent retry, and rejection of a second concurrent Hold.
 
 ## Required negative cases
 

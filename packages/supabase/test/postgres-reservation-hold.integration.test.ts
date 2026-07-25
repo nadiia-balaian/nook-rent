@@ -159,6 +159,54 @@ describeWithDatabase('Postgres Reservation Hold repository', () => {
     }
   });
 
+  it('accepts and consumes a fresh World nonce on an idempotent retry', async () => {
+    const input = {
+      requestId: 'request-idempotent-fresh-world-nonce',
+      listingId: LISTING_ID,
+      guestProfileId: GUEST_ONE_ID,
+      quoteId: QUOTE_ONE_ID,
+      stayRange: StayRange.fromStrings({
+        checkIn: '2026-08-10',
+        checkOut: '2026-08-15',
+      }),
+      expiresAt: '2026-07-25T10:10:00.000Z',
+      now: NOW,
+      authorization: authorization('world-idempotent-original'),
+    };
+
+    const first = await repository.createActive(input);
+    const retry = await repository.createActive({
+      ...input,
+      authorization: authorization('world-idempotent-fresh'),
+    });
+
+    expect(first.status).toBe('created');
+    expect(retry.status).toBe('idempotent');
+
+    if (first.status === 'created' && retry.status === 'idempotent') {
+      expect(retry.hold.id).toBe(first.hold.id);
+    }
+
+    const [authorizationRow] = await sql<{ authorizationCount: string }[]>`
+      select count(*)::text as "authorizationCount"
+      from nook.human_backed_authorizations
+      where request_id = ${input.requestId}
+    `;
+    expect(authorizationRow?.authorizationCount).toBe('2');
+
+    await expect(
+      repository.createActive({
+        ...input,
+        requestId: 'request-replaying-idempotent-nonce',
+        guestProfileId: GUEST_TWO_ID,
+        quoteId: QUOTE_TWO_ID,
+        authorization: authorization('world-idempotent-fresh', '2'),
+      }),
+    ).rejects.toMatchObject({
+      conflict: 'world_nonce_replayed',
+    });
+  });
+
   it('rejects a replayed World AgentKit nonce', async () => {
     const stayRange = StayRange.fromStrings({
       checkIn: '2026-08-10',

@@ -4,10 +4,15 @@ const privateKey = z
   .string()
   .regex(/^0x[0-9a-fA-F]{64}$/, 'must be a 32-byte 0x-prefixed private key');
 
+const optionalUrl = z.preprocess(
+  (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
+  z.url().optional(),
+);
+
 const verifierEnvironmentSchema = z.object({
   WORLD_AGENTKIT_RESOURCE_URI: z.url(),
   WORLD_HUMAN_REFERENCE_SECRET: z.string().min(32),
-  WORLD_CHAIN_RPC_URL: z.url().optional(),
+  WORLD_CHAIN_RPC_URL: optionalUrl,
 });
 
 const guestAgentEnvironmentSchema = verifierEnvironmentSchema.extend({

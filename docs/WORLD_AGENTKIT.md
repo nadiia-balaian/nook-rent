@@ -29,7 +29,7 @@ contains only:
 }
 ```
 
-## Implemented locally
+## Implemented
 
 - official `@worldcoin/agentkit` server and Guest Agent client;
 - five-minute World Chain challenge bound to the Reservation Hold URL;
@@ -42,10 +42,8 @@ contains only:
 - atomic authorization and Reservation Hold creation;
 - explicit missing-proof, invalid-proof, unverified-Agent, replay, and hold-limit
   responses;
-- local protocol, API, and real PostgreSQL integration tests.
-
-The fourth migration is intentionally not applied to hosted Supabase until that
-external write is explicitly approved.
+- local protocol, API, and real PostgreSQL integration tests;
+- hosted authorization and idempotent-retry migrations.
 
 ## One-time setup
 
@@ -60,6 +58,8 @@ WORLD_HUMAN_REFERENCE_SECRET=<at least 32 random characters>
 WORLD_CHAIN_RPC_URL=<optional World Chain RPC URL>
 WORLD_AGENT_WALLET_PRIVATE_KEY=<0x-prefixed Agent wallet private key>
 ```
+
+Leave `WORLD_CHAIN_RPC_URL` blank to use the default public World Chain RPC.
 
 The API verifier needs the resource URI and human-reference secret. The Agent
 wallet key belongs only in the Guest Agent runtime or a local demo environment;
@@ -91,10 +91,10 @@ demo owner. See the official
 [AgentKit integration guide](https://docs.world.org/agents/agent-kit/integrate)
 and [SDK reference](https://docs.world.org/agents/agent-kit/sdk-reference).
 
-## Local proof flow
+## Proof flow
 
-After the fourth migration is applied to the intended database, start the API
-and create a fresh Booking Quote through the web or API. Then let the registered
+After the migrations are applied to the intended database, start the API and
+create a fresh Booking Quote through the web or API. Then let the registered
 Guest Agent place the protected hold:
 
 ```bash
@@ -111,6 +111,22 @@ Expected behavior:
 4. retrying the same idempotency key returns the same Hold;
 5. reusing the proof nonce for a different request is rejected;
 6. the same verified human cannot keep a second active Hold.
+
+## Live exit evidence
+
+Verified on 2026-07-25 against AgentBook on World Chain:
+
+- an unsigned Reservation Hold request returned an AgentKit `402` challenge;
+- the registered Guest Agent signed the challenge and created the Hold;
+- the API returned only `provider: world_agentkit` and `humanBacked: true`;
+- the experienced Guest was automatically approved;
+- a retry with the same idempotency key and a fresh challenge nonce returned
+  the original Hold and Booking;
+- a second concurrent Hold from the same verified human was rejected with
+  `human_active_hold_limit`.
+
+No private key, World human identifier, signed header, nonce, database URL, or
+human-reference hash is recorded.
 
 ## Evidence to capture
 
