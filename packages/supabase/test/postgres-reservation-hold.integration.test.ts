@@ -494,7 +494,7 @@ describeWithDatabase('Postgres Reservation Hold repository', () => {
       where schemaname = 'nook'
     `;
 
-    expect(tables).toHaveLength(16);
+    expect(tables).toHaveLength(17);
     expect(tables.every((table) => table.relrowsecurity)).toBe(true);
     expect(policies[0]?.policy_count).toBe(0);
   });
