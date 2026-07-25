@@ -1,5 +1,6 @@
 import {
   CheckCircle2,
+  ChevronDown,
   History,
   LoaderCircle,
   Network,
@@ -39,6 +40,60 @@ export function WalletEvidencePanel({
 
   return (
     <ConnectedWalletEvidencePanel evidence={evidence} onClear={onClear} onEvidence={onEvidence} />
+  );
+}
+
+export function WalletAccountMenu({
+  evidence,
+  onClear,
+  onEvidence,
+}: {
+  evidence: WalletEvidence | null;
+  onClear: () => void;
+  onEvidence: (evidence: WalletEvidence) => void;
+}) {
+  const [open, setOpen] = useState(false);
+
+  if (!reownConfigured) {
+    return null;
+  }
+
+  const ensName = evidence?.theGraph?.ownedNames[0];
+  const activityLabel = evidence
+    ? `${evidence.signals.totalPoaps} POAP${evidence.signals.totalPoaps === 1 ? '' : 's'}`
+    : 'Wallet & activity';
+
+  return (
+    <div className="wallet-account-menu">
+      <button
+        aria-controls="wallet-account-popover"
+        aria-expanded={open}
+        className="wallet-account-button"
+        type="button"
+        onClick={() => setOpen((current) => !current)}
+      >
+        <WalletCards size={16} />
+        <span className="wallet-account-copy">
+          <strong>{ensName ?? 'Account'}</strong>
+          <small>{activityLabel}</small>
+        </span>
+        <ChevronDown className={open ? 'open' : ''} size={14} />
+      </button>
+      {open && (
+        <div
+          aria-label="Account information"
+          className="wallet-account-popover"
+          id="wallet-account-popover"
+          role="dialog"
+        >
+          <ConnectedWalletEvidencePanel
+            evidence={evidence}
+            onClear={onClear}
+            onEvidence={onEvidence}
+          />
+        </div>
+      )}
+    </div>
   );
 }
 

@@ -235,6 +235,76 @@ p {
   gap: 9px;
 }
 
+.wallet-account-menu {
+  position: relative;
+}
+
+.wallet-account-button {
+  display: inline-flex;
+  min-height: 42px;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  color: var(--pine);
+  border: 1px solid rgb(49 92 85 / 16%);
+  border-radius: 13px;
+  background: rgb(255 252 247 / 86%);
+  box-shadow: 0 6px 18px rgb(49 92 85 / 6%);
+  cursor: pointer;
+}
+
+.wallet-account-copy {
+  display: flex;
+  max-width: 140px;
+  flex-direction: column;
+  align-items: flex-start;
+  line-height: 1.15;
+}
+
+.wallet-account-copy strong,
+.wallet-account-copy small {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wallet-account-copy strong {
+  font-size: 0.75rem;
+}
+
+.wallet-account-copy small {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 0.59rem;
+}
+
+.wallet-account-button > svg:last-child {
+  transition: transform 160ms ease;
+}
+
+.wallet-account-button > svg:last-child.open {
+  transform: rotate(180deg);
+}
+
+.wallet-account-popover {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 10px);
+  right: 0;
+  width: min(380px, calc(100vw - 28px));
+  border: 1px solid rgb(49 92 85 / 16%);
+  border-radius: 18px;
+  background: var(--surface);
+  box-shadow: var(--shadow-md);
+}
+
+.wallet-account-popover .wallet-evidence-card {
+  margin-top: 0;
+  border: 0;
+  background: transparent;
+}
+
 .role-label,
 .api-status,
 .reset-button {
@@ -2639,6 +2709,29 @@ p {
   .role-label,
   .reset-button span {
     display: none;
+  }
+
+  .wallet-account-copy {
+    display: none;
+  }
+
+  .wallet-account-button {
+    width: 36px;
+    min-height: 36px;
+    justify-content: center;
+    padding: 7px;
+  }
+
+  .wallet-account-button > svg:last-child {
+    display: none;
+  }
+
+  .wallet-account-popover {
+    position: fixed;
+    top: 69px;
+    right: 14px;
+    left: 14px;
+    width: auto;
   }
 
   .reset-button {

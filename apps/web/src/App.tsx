@@ -56,7 +56,7 @@ import {
   type WorldIdRpContext,
 } from './api.js';
 import { DEFAULT_GUEST_QUERY, DEFAULT_SEARCH, DEMO_PROFILES, type DemoGuestKey } from './demo.js';
-import { WalletEvidencePanel } from './WalletEvidencePanel.js';
+import { WalletAccountMenu } from './WalletEvidencePanel.js';
 
 type DemoRole = 'guest' | 'host';
 type ApiStatus = 'checking' | 'ready' | 'unavailable';
@@ -253,24 +253,37 @@ export function App() {
     setBusyAction('connect-world-id');
     setError(null);
 
-    void nookApi
-      .memberWorldIdStatus(profileId)
-      .then((status) => {
-        if (active && status.humanVerified) {
-          setMemberWorldIdVerification(status);
+    void (async () => {
+      try {
+        const status = await nookApi.memberWorldIdStatus(profileId);
+
+        if (!active || !status.humanVerified) return;
+
+        setMemberWorldIdVerification(status);
+
+        if (role === 'host') {
+          setScreen('host-create');
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+          return;
         }
-      })
-      .catch((caught) => {
+
+        const connection = await nookApi.connectWorldAgent(selectedGuest.id);
+        if (!active) return;
+
+        setWorldConnection(connection);
+        setScreen('guest-search');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      } catch (caught) {
         if (!active) return;
         setError(
           caught instanceof NookApiError
             ? caught
             : new NookApiError('unexpected_error', 'Unexpected application error'),
         );
-      })
-      .finally(() => {
+      } finally {
         if (active) setBusyAction(null);
-      });
+      }
+    })();
 
     return () => {
       active = false;
@@ -303,7 +316,6 @@ export function App() {
     setMemberWorldIdRpContext(null);
     setMemberWorldIdOpen(false);
     setMemberWorldIdVerification(null);
-    setWalletEvidence(null);
     setError(null);
   };
 
@@ -332,7 +344,6 @@ export function App() {
     setMemberWorldIdRpContext(null);
     setMemberWorldIdOpen(false);
     setMemberWorldIdVerification(null);
-    setWalletEvidence(null);
     navigate('identity');
   };
 
@@ -695,9 +706,6 @@ export function App() {
             onContinue={() => navigate(nextAfterOnboarding(role))}
             onVerifyMember={() => void openMemberWorldId()}
             role={role}
-            walletEvidence={walletEvidence}
-            onClearWalletEvidence={() => setWalletEvidence(null)}
-            onWalletEvidence={setWalletEvidence}
           />
         );
       case 'host-create':
@@ -740,13 +748,30 @@ export function App() {
           <ListedScreen
             listing={createdListing}
             onGuestView={() => {
+              const publishedWindow = createdListing?.availability[0];
+              const publishedListing = createdListing?.listing;
+
+              if (publishedWindow && publishedListing) {
+                const requiredAmenities = publishedListing.amenities.includes('wifi') ? 'wifi' : '';
+                setSearch({
+                  city: publishedListing.city,
+                  checkIn: publishedWindow.checkIn,
+                  checkOut: publishedWindow.checkOut,
+                  guests: 1,
+                  maximumNightlyRateAtomic: publishedListing.nightlyRateAtomic,
+                  amenities: requiredAmenities,
+                });
+                setGuestQuery(
+                  `Find me a stay in ${publishedListing.city} from ${publishedWindow.checkIn} to ${publishedWindow.checkOut} for 1 guest under ${publishedListing.nightlyRateAtomic}${requiredAmenities ? ` with ${requiredAmenities}` : ''}.`,
+                );
+              }
+
               setRole('guest');
               setWorldConnection(null);
               setMemberWorldIdConfig(null);
               setMemberWorldIdRpContext(null);
               setMemberWorldIdOpen(false);
               setMemberWorldIdVerification(null);
-              setWalletEvidence(null);
               navigate('identity');
             }}
           />
@@ -847,6 +872,9 @@ export function App() {
           onReset={resetDemo}
           onRetryApi={() => void checkApi()}
           role={role}
+          walletEvidence={walletEvidence}
+          onClearWalletEvidence={() => setWalletEvidence(null)}
+          onWalletEvidence={setWalletEvidence}
         />
       )}
 
@@ -887,14 +915,20 @@ export function App() {
 
 function AppHeader({
   apiStatus,
+  onClearWalletEvidence,
   onReset,
   onRetryApi,
+  onWalletEvidence,
   role,
+  walletEvidence,
 }: {
   apiStatus: ApiStatus;
+  onClearWalletEvidence: () => void;
   onReset: () => void;
   onRetryApi: () => void;
+  onWalletEvidence: (evidence: WalletEvidence) => void;
   role: DemoRole;
+  walletEvidence: WalletEvidence | null;
 }) {
   return (
     <>
@@ -920,6 +954,11 @@ function AppHeader({
                 ? 'Checking'
                 : 'Retry API'}
           </button>
+          <WalletAccountMenu
+            evidence={walletEvidence}
+            onClear={onClearWalletEvidence}
+            onEvidence={onWalletEvidence}
+          />
           <button className="reset-button" type="button" onClick={onReset}>
             <RefreshCw size={14} /> Restart
           </button>
@@ -1034,11 +1073,8 @@ function IdentityScreen({
   onBack,
   onConnectAgent,
   onContinue,
-  onClearWalletEvidence,
   onVerifyMember,
-  onWalletEvidence,
   role,
-  walletEvidence,
 }: {
   busyAgent: boolean;
   busyWorldId: boolean;
@@ -1048,11 +1084,8 @@ function IdentityScreen({
   onBack: () => void;
   onConnectAgent: () => void;
   onContinue: () => void;
-  onClearWalletEvidence: () => void;
   onVerifyMember: () => void;
-  onWalletEvidence: (evidence: WalletEvidence) => void;
   role: DemoRole;
-  walletEvidence: WalletEvidence | null;
 }) {
   const isGuest = role === 'guest';
   const connectingAgent = isGuest && memberVerification && !connection;
@@ -1163,11 +1196,6 @@ function IdentityScreen({
                 label="The Graph verified"
               />
             </div>
-            <WalletEvidencePanel
-              evidence={walletEvidence}
-              onClear={onClearWalletEvidence}
-              onEvidence={onWalletEvidence}
-            />
             <button className="primary-button full-width" type="button" onClick={onContinue}>
               Continue <ArrowRight size={17} />
             </button>
@@ -1657,6 +1685,9 @@ function ListedScreen({
   listing: ListingDetail | null;
   onGuestView: () => void;
 }) {
+  const publishedWindow = listing?.availability[0];
+  const publishedListing = listing?.listing;
+
   return (
     <section className="success-page">
       <SuccessMark />
@@ -1664,12 +1695,19 @@ function ListedScreen({
       <h1>Your place is listed.</h1>
       <p>Guests can now find it for the dates you made available.</p>
       <article className="listed-card">
-        <img alt="Sunlit Graça apartment with a balcony" src={LISTING_IMAGES[2]} />
+        <img
+          alt={
+            publishedListing ? `${publishedListing.title} in ${publishedListing.neighborhood}` : ''
+          }
+          src={imageForListing(publishedListing ?? null, 2)}
+        />
         <div>
-          <h2>{listing?.listing.title ?? 'Your Graça nook'}</h2>
+          <h2>{publishedListing?.title ?? 'Your nook'}</h2>
           <p>
-            {formatDate(initialListingDraft.checkIn)} – {formatDate(initialListingDraft.checkOut)} ·{' '}
-            {formatAtomicUnits(initialListingDraft.nightlyRateAtomic)} test units / night
+            {publishedWindow
+              ? `${formatDate(publishedWindow.checkIn)} – ${formatDate(publishedWindow.checkOut)}`
+              : 'Published availability'}{' '}
+            · {formatAtomicUnits(publishedListing?.nightlyRateAtomic ?? '0')} test units / night
           </p>
           <span className="live-badge">
             <span /> Published

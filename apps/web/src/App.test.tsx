@@ -5,7 +5,13 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { App } from './App.js';
-import type { BookingQuote, DepositResult, Listing, ReservationResult } from './api.js';
+import type {
+  BookingQuote,
+  DepositResult,
+  Listing,
+  ListingDetail,
+  ReservationResult,
+} from './api.js';
 import { ReownProvider } from './reown.js';
 
 vi.mock('@worldcoin/idkit', () => ({
@@ -215,6 +221,7 @@ function installMarketplaceApi(
 ) {
   const initialReservation = reservation(mode);
   const verifiedMemberProfiles = new Set<string>();
+  let createdListingDetail: ListingDetail | null = null;
   vi.stubGlobal('scrollTo', vi.fn());
 
   vi.stubGlobal(
@@ -377,46 +384,70 @@ function installMarketplaceApi(
         return Promise.resolve(jsonResponse({ items: [listing] }));
       }
       if (url.pathname === '/v1/listings' && init?.method === 'POST') {
-        return Promise.resolve(
-          jsonResponse({
-            listing: {
-              ...listing,
-              title: 'Agent-drafted Graça home',
-              status: 'draft',
-            },
-            availability: [],
-            approvalPolicy: {
-              listingId: listing.id,
-              policy: {
-                automaticApprovalEnabled: true,
-                minimumRentalReputationTier: 'silver',
-              },
-              version: 1,
-              updatedAt: listing.updatedAt,
-            },
-          }),
-        );
+        if (typeof init.body !== 'string') {
+          throw new Error('Expected JSON request body for Listing creation');
+        }
+
+        const body = JSON.parse(init.body) as {
+          approvalPolicy: ListingDetail['approvalPolicy']['policy'];
+          availability: Array<{ checkIn: string; checkOut: string }>;
+          baseDepositAtomic: string;
+          nightlyRateAtomic: string;
+        };
+        createdListingDetail = {
+          listing: {
+            ...listing,
+            title: 'Agent-drafted Graça home',
+            baseDepositAtomic: body.baseDepositAtomic,
+            nightlyRateAtomic: body.nightlyRateAtomic,
+            status: 'draft',
+          },
+          availability: body.availability.map((window, index) => ({
+            id: `31000000-0000-4000-8000-00000000000${index + 1}`,
+            ...window,
+            nights:
+              (Date.parse(`${window.checkOut}T00:00:00.000Z`) -
+                Date.parse(`${window.checkIn}T00:00:00.000Z`)) /
+              86_400_000,
+            createdAt: listing.createdAt,
+          })),
+          approvalPolicy: {
+            listingId: listing.id,
+            policy: body.approvalPolicy,
+            version: 1,
+            updatedAt: listing.updatedAt,
+          },
+        };
+
+        return Promise.resolve(jsonResponse(createdListingDetail, 201));
       }
       if (url.pathname.endsWith('/publish')) {
-        return Promise.resolve(
-          jsonResponse({
-            listing: {
-              ...listing,
-              title: 'Agent-drafted Graça home',
-              status: 'published',
+        const detail = createdListingDetail ?? {
+          listing: {
+            ...listing,
+            title: 'Agent-drafted Graça home',
+            status: 'draft' as const,
+          },
+          availability: [],
+          approvalPolicy: {
+            listingId: listing.id,
+            policy: {
+              automaticApprovalEnabled: true,
+              minimumRentalReputationTier: 'silver' as const,
             },
-            availability: [],
-            approvalPolicy: {
-              listingId: listing.id,
-              policy: {
-                automaticApprovalEnabled: true,
-                minimumRentalReputationTier: 'silver',
-              },
-              version: 1,
-              updatedAt: listing.updatedAt,
-            },
-          }),
-        );
+            version: 1,
+            updatedAt: listing.updatedAt,
+          },
+        };
+        createdListingDetail = {
+          ...detail,
+          listing: {
+            ...detail.listing,
+            status: 'published',
+          },
+        };
+
+        return Promise.resolve(jsonResponse(createdListingDetail));
       }
       if (url.pathname === '/v1/booking-quotes') {
         return Promise.resolve(
@@ -558,7 +589,7 @@ describe('Nook marketplace demo', () => {
     expect(screen.getByRole('button', { name: /I’m looking for a place/ })).toBeTruthy();
   });
 
-  it('reuses one Member verification when changing from Host to Guest', async () => {
+  it('skips verified Member onboarding when changing from Host to Guest', async () => {
     installMarketplaceApi('automatic');
     const user = userEvent.setup();
 
@@ -572,7 +603,26 @@ describe('Nook marketplace demo', () => {
     await user.click(screen.getByRole('button', { name: 'Get started' }));
     await user.click(screen.getByRole('button', { name: /I’m looking for a place/ }));
 
-    expect((await screen.findAllByText('World ID verified')).length).toBeGreaterThan(0);
+    expect(await screen.findByRole('heading', { name: 'Where to?' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Verify with World ID' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Connect World-backed Agent' })).toBeNull();
+  });
+
+  it('skips verified Member onboarding when returning as a Host', async () => {
+    installMarketplaceApi('automatic');
+    const user = userEvent.setup();
+
+    renderApp();
+
+    await user.click(await screen.findByRole('button', { name: 'Get started' }));
+    await user.click(screen.getByRole('button', { name: /I want to rent out my place/ }));
+    await completeMemberWorldId(user);
+
+    await user.click(screen.getByRole('button', { name: 'Restart' }));
+    await user.click(screen.getByRole('button', { name: 'Get started' }));
+    await user.click(screen.getByRole('button', { name: /I want to rent out my place/ }));
+
+    expect(await screen.findByRole('heading', { name: 'Show us your nook.' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Verify with World ID' })).toBeNull();
   });
 
@@ -694,11 +744,24 @@ describe('Nook marketplace demo', () => {
     expect(screen.getByText(/Live OpenAI/)).toBeTruthy();
 
     await user.click(screen.getByRole('button', { name: 'Review dates and terms' }));
+    const availableFrom = screen.getByLabelText('Available from');
+    const availableUntil = screen.getByLabelText('Available until');
+    await user.clear(availableFrom);
+    await user.type(availableFrom, '2026-09-06');
+    await user.clear(availableUntil);
+    await user.type(availableUntil, '2026-09-12');
     await user.click(screen.getByRole('button', { name: 'Save Listing draft' }));
     expect(await screen.findByText('Reviewable Listing draft saved.')).toBeTruthy();
 
     await user.click(screen.getByRole('button', { name: 'Confirm and publish' }));
     expect(await screen.findByRole('heading', { name: 'Your place is listed.' })).toBeTruthy();
     expect(screen.getByText('Published')).toBeTruthy();
+    expect(screen.getByText(/Sep 6 – Sep 12/)).toBeTruthy();
+
+    await user.click(screen.getByRole('button', { name: 'Continue as a Guest' }));
+    expect(await screen.findByRole('heading', { name: 'Where to?' })).toBeTruthy();
+    expect(
+      screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'Ask your Guest Agent' }).value,
+    ).toContain('2026-09-06 to 2026-09-12');
   });
 });
