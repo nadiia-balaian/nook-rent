@@ -4,9 +4,14 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": {
+      "types": "./src/index.ts",
+      "development": "./src/index.ts",
+      "default": "./dist/index.js"
+    }
   },
   "scripts": {
+    "build": "tsc -p tsconfig.build.json",
     "graph:agent-register": "node --env-file-if-exists=../../.env --import tsx src/register-cli.ts",
     "graph:agent-status": "node --env-file-if-exists=../../.env --import tsx src/status-cli.ts",
     "test": "vitest run",

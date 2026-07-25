@@ -4,9 +4,14 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": {
+      "types": "./src/index.ts",
+      "development": "./src/index.ts",
+      "default": "./dist/index.js"
+    }
   },
   "scripts": {
+    "build": "tsc -p tsconfig.build.json",
     "supabase:migrate": "node --env-file-if-exists=../../.env --import tsx src/migrate-cli.ts",
     "supabase:seed-demo": "node --env-file-if-exists=../../.env --import tsx src/seed-demo-cli.ts",
     "typecheck": "tsc -p tsconfig.json"

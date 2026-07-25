@@ -9,6 +9,7 @@
   },
   "scripts": {
     "build": "pnpm -r --if-present build",
+    "build:packages": "pnpm --filter './packages/**' --recursive --if-present build",
     "build:web": "pnpm --filter @nook-rent/web build",
     "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test",
     "dev": "pnpm --parallel --filter @nook-rent/api --filter @nook-rent/web dev",
