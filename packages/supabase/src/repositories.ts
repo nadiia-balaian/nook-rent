@@ -292,6 +292,28 @@ export class PostgresListingRepository implements ListingRepositoryPort {
         and listing.max_guests >= ${input.guests}
         and availability.check_in <= ${input.stayRange.checkIn.toString()}::date
         and availability.check_out >= ${input.stayRange.checkOut.toString()}::date
+        and not exists (
+          select 1
+          from nook.reservation_holds as hold
+          where hold.listing_id = listing.id
+            and hold.status = 'active'
+            and hold.expires_at > current_timestamp
+            and hold.check_in < ${input.stayRange.checkOut.toString()}::date
+            and ${input.stayRange.checkIn.toString()}::date < hold.check_out
+        )
+        and not exists (
+          select 1
+          from nook.bookings as booking
+          where booking.listing_id = listing.id
+            and booking.status in (
+              'confirmed',
+              'checked_in',
+              'checkout_pending',
+              'disputed'
+            )
+            and booking.check_in < ${input.stayRange.checkOut.toString()}::date
+            and ${input.stayRange.checkIn.toString()}::date < booking.check_out
+        )
         and (
           ${maximumNightlyRate}::numeric is null
           or listing.nightly_rate_atomic <= ${maximumNightlyRate}::numeric
@@ -961,7 +983,7 @@ export class PostgresDepositOperationRepository implements DepositOperationRepos
           from nook.operations
           where id = ${input.operationId}
         )
-          and status in ('awaiting_deposit', 'confirmed')
+          and status in ('awaiting_deposit', 'expired', 'confirmed')
         returning id
       `;
       const holds = await transaction<{ id: string }[]>`

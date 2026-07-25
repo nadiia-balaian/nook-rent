@@ -86,6 +86,9 @@ the guided demo it also exposes a narrow bridge to the server-side Guest Agent.
 The browser may approve one bounded Agent Mandate to select the top
 database-valid match, accept its deterministic quote, and request a protected
 hold without receiving Agent signing material.
+Listing search excludes overlapping live Reservation Holds and confirmed
+occupancy before any Agent ranking. Expiring a Hold also expires its still
+pending Booking so an abandoned attempt cannot reserve dates forever.
 
 ### `apps/worker`
 

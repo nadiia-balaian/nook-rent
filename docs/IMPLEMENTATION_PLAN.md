@@ -145,6 +145,7 @@ Implement:
 - role switch for demo Host and Guest;
 - Listing creation form and Agent draft review;
 - search by city, dates, budget, and amenities;
+- exclude overlapping live Holds and confirmed Bookings before Agent ranking;
 - Listing cards and quote summary;
 - Booking status timeline;
 - Host review screen;

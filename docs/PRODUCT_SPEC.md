@@ -226,8 +226,9 @@ A public Listing includes:
 
 Exact street address is not public.
 
-The availability service must atomically prevent overlapping active holds and
-confirmed Bookings.
+The availability service must exclude overlapping live holds and confirmed
+Bookings during discovery, then atomically repeat that protection when the Hold
+is created.
 
 ## 13. Reservation Hold
 
@@ -241,6 +242,10 @@ A Reservation Hold:
 - converts into a Booking only after approval and escrow success;
 - releases dates after rejection, expiry, cancellation, or unrecoverable
   payment failure.
+
+When a Hold expires before confirmation, any still-pending Booking expires with
+it. A submitted financial Operation remains reconcilable if authoritative
+provider evidence later confirms it.
 
 ## 14. Booking lifecycle
 

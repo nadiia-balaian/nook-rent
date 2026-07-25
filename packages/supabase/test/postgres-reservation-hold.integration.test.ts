@@ -133,6 +133,82 @@ describeWithDatabase('Postgres Reservation Hold repository', () => {
     expect(misses).toEqual([]);
   });
 
+  it('hides held dates and restores them when the hold and pending Booking expire', async () => {
+    const stayRange = StayRange.fromStrings({
+      checkIn: '2026-08-10',
+      checkOut: '2026-08-15',
+    });
+    const holdId = '50000000-0000-4000-8000-000000000009';
+    await sql`
+      insert into nook.reservation_holds (
+        id,
+        request_id,
+        listing_id,
+        guest_profile_id,
+        quote_id,
+        check_in,
+        check_out,
+        status,
+        expires_at,
+        created_at,
+        updated_at
+      )
+      values (
+        ${holdId},
+        'request-search-lifecycle',
+        ${LISTING_ID},
+        ${GUEST_ONE_ID},
+        ${QUOTE_ONE_ID},
+        '2026-08-10',
+        '2026-08-15',
+        'active',
+        '2099-07-25T10:10:00.000Z',
+        ${NOW},
+        ${NOW}
+      )
+    `;
+
+    const bookingId = '50000000-0000-4000-8000-000000000010';
+    await bookingRepository.save({
+      id: bookingId,
+      listingId: LISTING_ID,
+      hostProfileId: HOST_ID,
+      guestProfileId: GUEST_ONE_ID,
+      quoteId: QUOTE_ONE_ID,
+      holdId,
+      stayRange,
+      settlementTokenId: '0.0.12345',
+      staySubtotal: TokenAmount.fromAtomicUnits('50000'),
+      depositAmount: TokenAmount.fromAtomicUnits('50000'),
+      status: 'awaiting_deposit',
+      createdAt: NOW,
+      updatedAt: NOW,
+    });
+
+    const blocked = await listingRepository.search({
+      city: 'Lisbon',
+      stayRange,
+      guests: 1,
+      requiredAmenities: ['wifi'],
+    });
+    expect(blocked).toEqual([]);
+
+    await repository.expireActive({
+      now: '2099-07-25T10:11:00.000Z',
+      limit: 100,
+    });
+
+    expect((await bookingRepository.getById(bookingId))?.status).toBe('expired');
+
+    const availableAgain = await listingRepository.search({
+      city: 'Lisbon',
+      stayRange,
+      guests: 1,
+      requiredAmenities: ['wifi'],
+    });
+    expect(availableAgain.map((listing) => listing.id)).toEqual([LISTING_ID]);
+  });
+
   it('returns the original hold when the same request is retried', async () => {
     const input = {
       requestId: 'request-idempotent',
@@ -465,6 +541,12 @@ describeWithDatabase('Postgres Reservation Hold repository', () => {
       attemptCount: 1,
       updatedAt: NOW,
     });
+    await repository.expireActive({
+      now: '2026-07-25T10:11:00.000Z',
+      limit: 100,
+    });
+    expect((await bookingRepository.getById(booking.id))?.status).toBe('expired');
+
     const confirmed = await depositRepository.confirmDeposit({
       operationId: prepared.operation.id,
       transactionId: '0.0.1001@1784980800.000000001',
