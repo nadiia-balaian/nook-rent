@@ -193,6 +193,44 @@ export interface WorldIdMemberVerification {
   status: 'created' | 'idempotent';
 }
 
+export interface WalletChallenge {
+  address: string;
+  issuedAt: string;
+  expiresAt: string;
+  nonce: string;
+  message: string;
+  integrity: string;
+}
+
+export interface WalletEvidence {
+  provider: 'poap_compass';
+  walletControl: {
+    verified: true;
+    address: string;
+    verifiedAt: string;
+  };
+  signals: {
+    totalPoaps: number;
+    distinctEvents: number;
+    activeYears: number[];
+    firstCollectedAt?: string;
+    latestCollectedAt?: string;
+    tokensWithRecordedTransfers: number;
+    totalRecordedTransfers: number;
+  };
+  recentPoaps: Array<{
+    tokenId: string;
+    eventId: string;
+    collectedAt: string;
+    transferCount: number;
+    chain?: string;
+    eventName?: string;
+    eventStartDate?: string;
+    imageUrl?: string;
+  }>;
+  truncated: boolean;
+}
+
 export interface DepositResult {
   idempotent: boolean;
   operation: {
@@ -376,6 +414,18 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const nookApi = {
   readiness: () => request<{ service: string; status: 'ready' }>('/ready'),
+
+  createWalletChallenge: (address: string) =>
+    request<WalletChallenge>('/v1/wallet-verification/challenge', {
+      method: 'POST',
+      body: JSON.stringify({ address }),
+    }),
+
+  readWalletPoaps: (input: { challenge: WalletChallenge; signature: string }) =>
+    request<WalletEvidence>('/v1/wallet-verification/poap', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
 
   connectWorldAgent: (profileId: string) =>
     request<WorldConnection>('/v1/agents/guest/world-connection', {

@@ -9,3 +9,4 @@ export * from './marketplace-service.js';
 export * from './ports.js';
 export * from './state-machine.js';
 export * from './token-amount.js';
+export * from './wallet-evidence.js';

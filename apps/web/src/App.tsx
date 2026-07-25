@@ -49,12 +49,14 @@ import {
   nookApi,
   type ReservationResult,
   type SearchInput,
+  type WalletEvidence,
   type WorldConnection,
   type WorldIdMemberConfig,
   type WorldIdMemberVerification,
   type WorldIdRpContext,
 } from './api.js';
 import { DEFAULT_GUEST_QUERY, DEFAULT_SEARCH, DEMO_PROFILES, type DemoGuestKey } from './demo.js';
+import { WalletEvidencePanel } from './WalletEvidencePanel.js';
 
 type DemoRole = 'guest' | 'host';
 type ApiStatus = 'checking' | 'ready' | 'unavailable';
@@ -225,6 +227,7 @@ export function App() {
   const [memberWorldIdOpen, setMemberWorldIdOpen] = useState(false);
   const [memberWorldIdVerification, setMemberWorldIdVerification] =
     useState<WorldIdMemberVerification | null>(null);
+  const [walletEvidence, setWalletEvidence] = useState<WalletEvidence | null>(null);
 
   const selectedGuest = DEMO_PROFILES[guestKey];
 
@@ -268,6 +271,7 @@ export function App() {
     setMemberWorldIdRpContext(null);
     setMemberWorldIdOpen(false);
     setMemberWorldIdVerification(null);
+    setWalletEvidence(null);
     setError(null);
   };
 
@@ -296,6 +300,7 @@ export function App() {
     setMemberWorldIdRpContext(null);
     setMemberWorldIdOpen(false);
     setMemberWorldIdVerification(null);
+    setWalletEvidence(null);
     navigate('identity');
   };
 
@@ -366,6 +371,7 @@ export function App() {
     setMemberWorldIdRpContext(null);
     setMemberWorldIdOpen(false);
     setMemberWorldIdVerification(null);
+    setWalletEvidence(null);
     setSelectedListing(null);
     setQuote(null);
     setReservation(null);
@@ -649,6 +655,9 @@ export function App() {
             onContinue={() => navigate(nextAfterOnboarding(role))}
             onVerifyMember={() => void openMemberWorldId()}
             role={role}
+            walletEvidence={walletEvidence}
+            onClearWalletEvidence={() => setWalletEvidence(null)}
+            onWalletEvidence={setWalletEvidence}
           />
         );
       case 'host-create':
@@ -697,6 +706,7 @@ export function App() {
               setMemberWorldIdRpContext(null);
               setMemberWorldIdOpen(false);
               setMemberWorldIdVerification(null);
+              setWalletEvidence(null);
               navigate('identity');
             }}
           />
@@ -984,8 +994,11 @@ function IdentityScreen({
   onBack,
   onConnectAgent,
   onContinue,
+  onClearWalletEvidence,
   onVerifyMember,
+  onWalletEvidence,
   role,
+  walletEvidence,
 }: {
   busyAgent: boolean;
   busyWorldId: boolean;
@@ -995,8 +1008,11 @@ function IdentityScreen({
   onBack: () => void;
   onConnectAgent: () => void;
   onContinue: () => void;
+  onClearWalletEvidence: () => void;
   onVerifyMember: () => void;
+  onWalletEvidence: (evidence: WalletEvidence) => void;
   role: DemoRole;
+  walletEvidence: WalletEvidence | null;
 }) {
   const isGuest = role === 'guest';
   const connectingAgent = isGuest && memberVerification && !connection;
@@ -1107,6 +1123,11 @@ function IdentityScreen({
                 label="The Graph verified"
               />
             </div>
+            <WalletEvidencePanel
+              evidence={walletEvidence}
+              onClear={onClearWalletEvidence}
+              onEvidence={onWalletEvidence}
+            />
             <button className="primary-button full-width" type="button" onClick={onContinue}>
               Continue <ArrowRight size={17} />
             </button>

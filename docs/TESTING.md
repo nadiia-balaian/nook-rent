@@ -140,6 +140,12 @@ unavailable, unregistered, inactive, or missing the required capability. UI
 tests prove that only safe named Graph evidence is displayed. These are local
 controlled tests and do not count as live Graph evidence.
 
+The optional wallet-evidence suite verifies purpose-bound challenge integrity,
+expiry, address recovery, signature mismatch, POAP pagination, provider failure
+sanitization, and deterministic named-signal summaries. API tests prove the
+complete collection is not returned to the browser. These controlled tests do
+not count as a live Reown or POAP provider check.
+
 The Phase 8 suite validates OpenAI-shaped Structured Outputs without network
 calls. It proves deterministic fallback, clarification for incomplete Guest
 requests, hard filtering before ranking, rejection of invented or duplicated
@@ -160,6 +166,8 @@ tracer. These controlled tests do not count as a paid live OpenAI check.
 - Member World ID reused for another profile;
 - Agent wallet does not match the Graph registration;
 - Graph provider unavailable;
+- wallet signature rejected or expired;
+- POAP provider unavailable;
 - AI invents an unsupported amenity;
 - AI ranking references a Listing outside deterministic search results;
 - AI output attempts to add approval, deposit, token, or access authority;

@@ -321,6 +321,19 @@ Completed live exit:
 - created one protected live Hold with safe World and Graph evidence;
 - repeated the same request without creating another Hold or Booking.
 
+### Optional consented wallet evidence
+
+Status: implemented locally; live Reown and POAP smoke test pending.
+
+- connect an optional Guest EVM wallet through Reown;
+- prove wallet control with a short-lived, read-only signed message;
+- query public POAP Compass history server-side;
+- display named POAP count, distinct-event, and active-year signals;
+- keep wallet activity separate from Rental Reputation and approval.
+
+This enhancement is additive. A Guest with no wallet or no POAPs keeps the same
+World-verified marketplace access and Host review path.
+
 ## Phase 8: constrained AI Agents
 
 Estimate: 4–7 focused hours

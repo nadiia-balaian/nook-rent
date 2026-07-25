@@ -47,6 +47,11 @@ THE_GRAPH_AGENT0_SUBGRAPH_ID=4yYAvQLFjBhBtdRCY7eUWo181VNoTSLLFd5M7FXQAi6u
 THE_GRAPH_AGENT0_CHAIN_ID=84532
 THE_GRAPH_REQUIRED_CAPABILITY=nook.rent:reservation-hold
 
+POAP_SOURCE=compass
+POAP_GRAPHQL_API_KEY=<optional POAP Compass key>
+WALLET_CHALLENGE_SECRET=<at least 32 random characters>
+WALLET_CHALLENGE_TTL_SECONDS=300
+
 OPENAI_API_KEY=<project API key>
 OPENAI_MODEL=gpt-5.6-sol
 ```
@@ -72,10 +77,11 @@ Import the same GitHub repository as a second Vercel project:
 - output directory: use the framework default (`dist`)
 - Node.js: 24
 
-Set one Production environment variable:
+Set these Production environment variables:
 
 ```text
 VITE_API_URL=https://nook-rent-api.vercel.app
+VITE_REOWN_PROJECT_ID=<Reown Cloud project id>
 ```
 
 Deploy the API first. Then deploy the web project and add its exact production
@@ -91,7 +97,9 @@ that value.
 4. Complete direct Guest World ID verification, connect the Guest Agent, and
    confirm World Agent and The Graph
    badges appear.
-5. Complete the Host verification step in World App.
-6. Create a Listing, search, quote, hold, and Testnet deposit.
+5. Optionally connect a Guest wallet, sign the read-only message, and confirm
+   POAP evidence appears without changing Rental Reputation.
+6. Complete the Host verification step in World App.
+7. Create a Listing, search, quote, hold, and Testnet deposit.
 
 Never put private keys or service credentials in the web project.

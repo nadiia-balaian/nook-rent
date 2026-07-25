@@ -101,8 +101,9 @@ authorization and public onchain activity do not add Rental Reputation.
 ### Onchain Signal
 
 A named, publicly queryable fact associated with a consented wallet or Agent,
-such as registration, operator binding, advertised capability, or ENS name. An
-Onchain Signal is not private identity and is not automatically a trust score.
+such as registration, operator binding, advertised capability, ENS name, or
+POAP participation count. An Onchain Signal is not private identity and is not
+automatically a trust score.
 
 ### Escrow
 

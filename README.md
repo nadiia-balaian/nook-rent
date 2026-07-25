@@ -19,6 +19,7 @@ host describes a home
   -> host confirms price, dates, and approval policy
   -> Guest completes private World ID Member verification
   -> Guest connects a human-backed agent
+  -> Guest may add consented public wallet evidence
   -> guest agent searches available listings
   -> Guest authorizes one secure-best-match mandate
   -> agent selects the top valid listing and requests a hold
@@ -97,6 +98,9 @@ ready for one opt-in live smoke test:
 - guarded Agent0 registration and live status commands;
 - safe browser evidence that never reveals the Graph key, raw response, or
   signing wallet.
+- optional Reown wallet connection with a short-lived read-only signature;
+- server-side POAP Compass history reads summarized as named signals, never
+  Rental Reputation or approval;
 - constrained Host drafting with inferred fields and unconfirmed suggestions
   clearly marked;
 - Guest natural-language interpretation followed by deterministic database
@@ -128,6 +132,7 @@ packages/
   hedera/              HTS, HCS, Schedule Service, and Mirror Node
   world/               AgentKit and human-backed authorization
   the-graph/           live Subgraph queries and signal mapping
+  poap/                wallet-control proof and public POAP history
   supabase/            persistence repositories and migrations
 supabase/
   migrations/          Nook.rent-owned database changes

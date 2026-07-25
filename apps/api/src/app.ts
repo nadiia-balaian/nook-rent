@@ -28,6 +28,11 @@ import {
   PostgresReservationHoldRepository,
   PostgresWorldIdVerificationRepository,
 } from '@nook-rent/supabase';
+import {
+  EvmWalletProofService,
+  parseOptionalPoapEnvironment,
+  PoapCompassHistoryReader,
+} from '@nook-rent/poap';
 import { Agent0GraphClient, parseOptionalGraphEnvironment } from '@nook-rent/the-graph';
 import {
   createWorldGuestAgentClient,
@@ -40,6 +45,7 @@ import {
 import Fastify from 'fastify';
 
 import { createApi } from './api.js';
+import { WalletEvidenceService } from './wallet-evidence.js';
 
 const serverEnvironment = parseServerEnvironment(process.env);
 const databaseEnvironment = parseDatabaseEnvironment(process.env);
@@ -94,6 +100,19 @@ const graphEnvironment = parseOptionalGraphEnvironment(process.env);
 const agentRegistrationSignals = graphEnvironment
   ? new Agent0GraphClient(graphEnvironment)
   : undefined;
+const poapEnvironment = parseOptionalPoapEnvironment(process.env);
+const walletEvidence = poapEnvironment
+  ? new WalletEvidenceService({
+      history: new PoapCompassHistoryReader({
+        ...(poapEnvironment.endpoint ? { endpoint: poapEnvironment.endpoint } : {}),
+        ...(poapEnvironment.apiKey ? { apiKey: poapEnvironment.apiKey } : {}),
+      }),
+      proofs: new EvmWalletProofService({
+        secret: poapEnvironment.challengeSecret,
+        ttlSeconds: poapEnvironment.challengeTtlSeconds,
+      }),
+    })
+  : undefined;
 const hederaClient = hederaEnvironment ? createHederaClient(hederaEnvironment) : undefined;
 const deposits =
   hederaEnvironment && hederaClient
@@ -142,6 +161,7 @@ const app = createApi({
         requiredAgentCapability: graphEnvironment.requiredCapability,
       }
     : {}),
+  ...(walletEvidence ? { walletEvidence } : {}),
   readiness: async () => {
     await sql`select 1`;
   },

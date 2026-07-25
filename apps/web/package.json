@@ -10,10 +10,15 @@
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
+    "@reown/appkit": "^1.8.23",
+    "@reown/appkit-adapter-wagmi": "^1.8.23",
+    "@tanstack/react-query": "^5.101.4",
     "@worldcoin/idkit": "4.2.1",
     "lucide-react": "1.26.0",
     "react": "19.2.8",
-    "react-dom": "19.2.8"
+    "react-dom": "19.2.8",
+    "viem": "2.55.8",
+    "wagmi": "^3.7.4"
   },
   "devDependencies": {
     "@testing-library/react": "16.3.2",

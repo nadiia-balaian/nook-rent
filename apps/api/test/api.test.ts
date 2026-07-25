@@ -90,6 +90,87 @@ describe('Nook API', () => {
     });
   });
 
+  it('issues a no-store wallet-control challenge for consented public evidence', async () => {
+    const challenge = {
+      address: '0x1111111111111111111111111111111111111111',
+      issuedAt: '2026-07-25T10:00:00.000Z',
+      expiresAt: '2026-07-25T10:05:00.000Z',
+      nonce: 'wallet-test-nonce',
+      message: 'Nook.rent wallet evidence',
+      integrity: `0x${'a'.repeat(64)}`,
+    };
+    const application = createApi({
+      walletEvidence: {
+        createChallenge: () => challenge,
+        verifyPoapCollection: () => Promise.reject(new Error('unused')),
+      },
+    });
+    applications.push(application);
+
+    const response = await application.inject({
+      method: 'POST',
+      url: '/v1/wallet-verification/challenge',
+      payload: {
+        address: challenge.address,
+      },
+    });
+
+    expect(response.statusCode).toBe(201);
+    expect(response.headers['cache-control']).toBe('no-store');
+    expect(response.json()).toEqual(challenge);
+  });
+
+  it('returns named POAP signals after wallet control is verified', async () => {
+    const challenge = {
+      address: '0x1111111111111111111111111111111111111111',
+      issuedAt: '2026-07-25T10:00:00.000Z',
+      expiresAt: '2026-07-25T10:05:00.000Z',
+      nonce: 'wallet-test-nonce',
+      message: 'Nook.rent wallet evidence',
+      integrity: `0x${'a'.repeat(64)}`,
+    };
+    const result = {
+      provider: 'poap_compass' as const,
+      walletControl: {
+        verified: true as const,
+        address: challenge.address,
+        verifiedAt: '2026-07-25T10:00:01.000Z',
+      },
+      signals: {
+        totalPoaps: 3,
+        distinctEvents: 3,
+        activeYears: [2025, 2026],
+        firstCollectedAt: '2025-01-01T00:00:00.000Z',
+        latestCollectedAt: '2026-07-25T00:00:00.000Z',
+        tokensWithRecordedTransfers: 0,
+        totalRecordedTransfers: 0,
+      },
+      recentPoaps: [],
+      truncated: false,
+    };
+    const application = createApi({
+      walletEvidence: {
+        createChallenge: () => challenge,
+        verifyPoapCollection: () => Promise.resolve(result),
+      },
+    });
+    applications.push(application);
+
+    const response = await application.inject({
+      method: 'POST',
+      url: '/v1/wallet-verification/poap',
+      payload: {
+        challenge,
+        signature: `0x${'b'.repeat(130)}`,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.headers['cache-control']).toBe('no-store');
+    expect(response.json()).toEqual(result);
+    expect(response.json()).not.toHaveProperty('history');
+  });
+
   it('uses a stable error envelope for unknown routes', async () => {
     const application = createApi();
     applications.push(application);

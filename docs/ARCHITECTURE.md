@@ -18,7 +18,9 @@ live OpenAI smoke evidence pending
 flowchart LR
   Browser["Web application"] --> API["Fastify API"]
   Browser --> WorldID["World IDKit"]
+  Browser --> Wallet["Reown wallet connection"]
   API --> WorldID
+  API --> POAP["POAP Compass GraphQL"]
   API --> GuestAgent["Server-side Guest Agent"]
   GuestAgent --> API
   API --> Core["Core application services"]
@@ -54,6 +56,7 @@ packages/
   hedera/
   world/
   the-graph/
+  poap/
   supabase/
 supabase/
   migrations/
@@ -70,6 +73,9 @@ The UI includes clearly labeled seeded Rental Reputation profiles while the
 real HCS projection is deferred; it never presents that demo data as live
 sponsor evidence. It does not hold provider credentials or make financial or
 authorization decisions.
+For optional wallet evidence, Reown exposes only the connected EVM address and a
+read-only message signature to the browser flow. The API validates the
+short-lived signature before querying public POAP history.
 
 ### `apps/api`
 
@@ -262,6 +268,21 @@ financial authority.
 - Cache the normalized result briefly; never cache past the configured expiry.
 - Do not expose the API key or raw provider response to the browser.
 - Do not convert arbitrary wallet activity into Rental Reputation.
+
+## Consented wallet evidence
+
+- Reown AppKit connects an optional Guest EVM wallet; World ID remains the
+  required private Member gate.
+- The API issues a short-lived, integrity-protected message that states the
+  read-only purpose.
+- The Guest signs the message; no transaction or payment permission is
+  requested.
+- The API verifies wallet control before querying POAP Compass GraphQL.
+- The browser receives named POAP counts and at most four recent public items,
+  not the provider's complete response.
+- Wallet evidence is not stored by the current demo and never changes Rental
+  Reputation, approval, deposit, or Agent authorization.
+- Missing history is neutral and never blocks the Guest flow.
 
 ## Hedera architecture
 

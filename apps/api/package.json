@@ -14,6 +14,7 @@
     "@nook-rent/config": "workspace:*",
     "@nook-rent/core": "workspace:*",
     "@nook-rent/hedera": "workspace:*",
+    "@nook-rent/poap": "workspace:*",
     "@nook-rent/supabase": "workspace:*",
     "@nook-rent/the-graph": "workspace:*",
     "@nook-rent/world": "workspace:*",

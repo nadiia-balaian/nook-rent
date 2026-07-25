@@ -181,6 +181,13 @@ queries a live agent registry to verify:
 Optional consented signals, such as ENS identity, may be displayed by name. They
 do not add Rental Reputation and do not authorize payment by themselves.
 
+After direct Guest verification, the Guest may optionally connect an EVM wallet
+through Reown. Nook.rent issues a short-lived, purpose-bound message and reads
+public POAP participation only after the Guest signs it. The result is displayed
+as named wallet evidence—POAP count, distinct events, and active years—and is
+never converted into Rental Reputation or automatic-approval eligibility.
+Missing wallet history remains neutral.
+
 Mocked Graph responses may support local unit tests but never count as sponsor
 evidence.
 

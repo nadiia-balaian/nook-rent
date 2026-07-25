@@ -23,9 +23,12 @@ import {
   TokenAmount,
 } from '@nook-rent/core';
 import { hederaTopicUrl, hederaTransactionUrl } from '@nook-rent/hedera';
+import { InvalidWalletControlProofError, PoapHistoryProviderError } from '@nook-rent/poap';
 import { WorldIdVerificationError } from '@nook-rent/world';
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
 import { z, ZodError } from 'zod';
+
+import type { WalletEvidenceService } from './wallet-evidence.js';
 
 type MarketplaceApi = Pick<
   MarketplaceService,
@@ -99,6 +102,7 @@ export interface CreateApiOptions {
   worldResourceUri?: string;
   agentRegistrationSignals?: OnchainSignalPort;
   requiredAgentCapability?: string;
+  walletEvidence?: Pick<WalletEvidenceService, 'createChallenge' | 'verifyPoapCollection'>;
   readiness?: () => Promise<void>;
 }
 
@@ -211,6 +215,29 @@ const guestAgentSearchBody = z
 const worldConnectionBody = z
   .object({
     profileId: uuid,
+  })
+  .strict();
+
+const evmAddress = z.string().regex(/^0x[a-fA-F0-9]{40}$/);
+const walletChallengeBody = z
+  .object({
+    address: evmAddress,
+  })
+  .strict();
+const walletChallenge = z
+  .object({
+    address: evmAddress,
+    issuedAt: z.iso.datetime(),
+    expiresAt: z.iso.datetime(),
+    nonce: z.string().min(8).max(200),
+    message: z.string().min(1).max(2_000),
+    integrity: z.string().regex(/^0x[a-fA-F0-9]{64}$/),
+  })
+  .strict();
+const walletPoapBody = z
+  .object({
+    challenge: walletChallenge,
+    signature: z.string().regex(/^0x[a-fA-F0-9]+$/),
   })
   .strict();
 
@@ -559,6 +586,37 @@ export function createApi(options: CreateApiOptions = {}): FastifyInstance {
     const input = profileBody.parse(request.body);
     const profile = await requireMarketplace(options.marketplace, request).createProfile(input);
     return reply.code(201).send(profile);
+  });
+
+  app.post('/v1/wallet-verification/challenge', async (request, reply) => {
+    const input = walletChallengeBody.parse(request.body);
+
+    if (!options.walletEvidence) {
+      throw new DomainConflictError(
+        'wallet_evidence_unavailable',
+        `Wallet evidence is unavailable for request ${request.id}`,
+      );
+    }
+
+    return reply
+      .header('cache-control', 'no-store')
+      .code(201)
+      .send(options.walletEvidence.createChallenge(input.address));
+  });
+
+  app.post('/v1/wallet-verification/poap', async (request, reply) => {
+    const input = walletPoapBody.parse(request.body);
+
+    if (!options.walletEvidence) {
+      throw new DomainConflictError(
+        'wallet_evidence_unavailable',
+        `Wallet evidence is unavailable for request ${request.id}`,
+      );
+    }
+
+    return reply
+      .header('cache-control', 'no-store')
+      .send(await options.walletEvidence.verifyPoapCollection(input));
   });
 
   app.post('/v1/listings/drafts', async (request) => {
@@ -1040,6 +1098,18 @@ export function createApi(options: CreateApiOptions = {}): FastifyInstance {
 
       if (error instanceof OnchainSignalProviderError) {
         return reply.code(503).send(errorEnvelope(request, error.reason, error.message));
+      }
+
+      if (error instanceof InvalidWalletControlProofError) {
+        return reply
+          .code(401)
+          .send(errorEnvelope(request, 'wallet_control_proof_invalid', error.message));
+      }
+
+      if (error instanceof PoapHistoryProviderError) {
+        return reply
+          .code(503)
+          .send(errorEnvelope(request, 'poap_provider_unavailable', error.message));
       }
 
       if (error instanceof DomainConflictError || error instanceof InvalidStateTransitionError) {
