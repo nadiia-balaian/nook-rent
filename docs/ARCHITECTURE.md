@@ -1,6 +1,6 @@
 # Nook.rent architecture
 
-Status: proposed baseline
+Status: Phase 1 foundation implemented; provider flows remain planned
 
 ## Principles
 
@@ -35,7 +35,7 @@ flowchart LR
   Worker --> Mirror
 ```
 
-## Planned monorepo
+## Monorepo
 
 ```text
 apps/

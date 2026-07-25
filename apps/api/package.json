@@ -1,0 +1,19 @@
+{
+  "name": "@nook-rent/api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/main.ts",
+    "start": "tsx src/main.ts",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@nook-rent/config": "workspace:*",
+    "@nook-rent/core": "workspace:*",
+    "fastify": "5.10.0"
+  },
+  "devDependencies": {
+    "tsx": "4.23.1"
+  }
+}

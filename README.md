@@ -41,11 +41,18 @@ rental behavior.
 
 ## Repository status
 
-This first commit establishes the product language, architecture, implementation
-sequence, sponsor strategy, testing expectations, and repository rules. Runtime
-applications will be scaffolded in the next phase.
+Phase 1 is implemented:
 
-Planned monorepo layout:
+- `pnpm` TypeScript monorepo and shared quality gate;
+- Fastify API shell with a tested health endpoint;
+- worker and Vite/React application shells;
+- deterministic 3–90-night validation;
+- exact Booking Quote and deposit arithmetic;
+- separate eligibility and automatic-approval policy;
+- Listing, Reservation Hold, and Booking state machines;
+- core-owned provider ports and provider package boundaries.
+
+Monorepo layout:
 
 ```text
 apps/

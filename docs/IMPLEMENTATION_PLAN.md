@@ -41,6 +41,8 @@ Exit check:
 
 Estimate: 3–5 focused hours
 
+Status: implemented locally on 2026-07-25
+
 Create:
 
 - root `pnpm` workspace and shared TypeScript configuration;
@@ -324,13 +326,14 @@ Defer in this order:
 
 Provider access or registration delays may add time.
 
-## First coding task
+## Next coding task
 
-Start with Phase 1 and deliver one commit:
+Continue with Phase 2 and deliver one focused commit:
 
 ```text
-chore: scaffold the TypeScript monorepo
+feat: add marketplace persistence and reservation holds
 ```
 
-That commit should include the workspace, application/package skeletons, quality
-gate, and the first failing-then-passing tests for 3–90-night validation.
+That commit should add the initial Supabase migrations, repositories, atomic
+overlap protection, hold expiry, and deterministic repository tests. Hosted
+migration execution remains a separately authorized action.
