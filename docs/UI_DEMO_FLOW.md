@@ -28,17 +28,24 @@ approval threshold, settlement token, or publication action.
 ```text
 Splash
   -> choose Guest
-  -> live World and The Graph verification badges
+  -> live World ID Member Proof of Human
+  -> connect the World-backed Guest Agent
+  -> live World Agent and The Graph verification badges
   -> select a seeded demo Rental Reputation profile
   -> natural-language Guest Agent search
   -> database-filtered Listing results
-  -> exact Booking Quote
-  -> Guest Agent receives the World AgentKit challenge and signs the protected hold
+  -> Guest authorizes one secure-best-match Agent Mandate
+  -> Agent selects the top valid result and creates the exact Booking Quote
+  -> Guest Agent receives the World AgentKit challenge and signs one protected hold
   -> live Agent0 check through The Graph
-  -> automatic approval or fair Host review
+  -> stored Host policy returns automatic approval or fair Host review
   -> Hedera Testnet deposit
   -> confirmed Booking and explorer evidence
 ```
+
+The manual Listing detail and quote path remains available for comparison. The
+Agentic path uses the same deterministic quote, hold, availability, and approval
+services.
 
 ## Evidence labels
 
@@ -46,11 +53,11 @@ The UI intentionally keeps these concepts separate:
 
 - **Demo Rental Reputation** is seeded UI data until the real HCS projection is
   implemented.
-- **World connection** becomes live when AgentBook confirms the configured Guest
-  Agent is human-backed.
-- **Host World ID** becomes live only after the API verifies the profile-bound
-  Proof of Human result. It remains separate from Guest Agent authorization and
-  Rental Reputation.
+- **Member World ID** becomes live only after the API verifies the
+  profile-bound Proof of Human result for either Host or Guest.
+- **World Agent connection** becomes live when AgentBook confirms the configured
+  Guest Agent is human-backed. It remains separate from direct Member
+  verification and Rental Reputation.
 - **The Graph** becomes live evidence when onboarding finds the active Agent0
   capability signal. The protected hold checks World and The Graph again before
   dates can be reserved.

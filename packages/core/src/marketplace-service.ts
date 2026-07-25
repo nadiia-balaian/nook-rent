@@ -295,6 +295,16 @@ export class MarketplaceService {
     return quote;
   }
 
+  async getQuote(quoteId: string): Promise<BookingQuote> {
+    const quote = await this.dependencies.quotes.getById(quoteId);
+
+    if (!quote) {
+      throw new ResourceNotFoundError('Booking Quote', quoteId);
+    }
+
+    return quote;
+  }
+
   async requestReservation(input: {
     requestId: string;
     quoteId: string;

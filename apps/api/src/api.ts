@@ -27,11 +27,25 @@ import { WorldIdVerificationError } from '@nook-rent/world';
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
 import { z, ZodError } from 'zod';
 
+type MarketplaceApi = Pick<
+  MarketplaceService,
+  | 'createListingDraft'
+  | 'createProfile'
+  | 'createQuote'
+  | 'decideBookingRequest'
+  | 'getBooking'
+  | 'getListing'
+  | 'getQuote'
+  | 'publishListing'
+  | 'requestReservation'
+  | 'searchListings'
+>;
+
 export interface CreateApiOptions {
   fastify?: FastifyInstance;
   logger?: boolean;
   allowedOrigins?: string[];
-  marketplace?: MarketplaceService;
+  marketplace?: MarketplaceApi;
   marketplaceAgents?: Pick<MarketplaceAgentService, 'createListingDraft' | 'search'>;
   deposits?: Pick<BookingDepositService, 'fundDeposit' | 'getDeposit' | 'reconcileDeposit'>;
   hederaTopicId?: string;
@@ -47,7 +61,7 @@ export interface CreateApiOptions {
     }>;
     createReservationHold(input: { quoteId: string; idempotencyKey: string }): Promise<Response>;
   };
-  hostWorldId?: {
+  memberWorldId?: {
     publicConfig(): {
       appId: `app_${string}`;
       rpId: `rp_${string}`;
@@ -70,10 +84,9 @@ export interface CreateApiOptions {
     }>;
   };
   worldIdVerifications?: {
-    isVerified(input: { profileId: string; role: 'host'; action: string }): Promise<boolean>;
+    isVerified(input: { profileId: string; action: string }): Promise<boolean>;
     record(input: {
       profileId: string;
-      role: 'host';
       provider: 'world_id';
       credential: 'proof_of_human';
       action: string;
@@ -195,6 +208,19 @@ const guestAgentSearchBody = z
   })
   .strict();
 
+const worldConnectionBody = z
+  .object({
+    profileId: uuid,
+  })
+  .strict();
+
+const guestAgentSecureMatchBody = z
+  .object({
+    guestProfileId: uuid,
+    query: z.string().trim().min(3).max(1_000),
+  })
+  .strict();
+
 function errorEnvelope(request: FastifyRequest, code: string, message: string, details?: unknown) {
   return {
     error: {
@@ -207,9 +233,9 @@ function errorEnvelope(request: FastifyRequest, code: string, message: string, d
 }
 
 function requireMarketplace(
-  marketplace: MarketplaceService | undefined,
+  marketplace: MarketplaceApi | undefined,
   request: FastifyRequest,
-): MarketplaceService {
+): MarketplaceApi {
   if (!marketplace) {
     throw new DomainConflictError(
       'marketplace_unavailable',
@@ -280,22 +306,41 @@ function requireWorldGuestAgent(
   return agent;
 }
 
-function requireHostWorldId(
-  verification: CreateApiOptions['hostWorldId'],
+function requireMemberWorldId(
+  verification: CreateApiOptions['memberWorldId'],
   repository: CreateApiOptions['worldIdVerifications'],
   request: FastifyRequest,
 ): {
-  verification: NonNullable<CreateApiOptions['hostWorldId']>;
+  verification: NonNullable<CreateApiOptions['memberWorldId']>;
   repository: NonNullable<CreateApiOptions['worldIdVerifications']>;
 } {
   if (!verification || !repository) {
     throw new DomainConflictError(
       'world_id_unavailable',
-      `World ID Host verification is unavailable for request ${request.id}`,
+      `World ID Member verification is unavailable for request ${request.id}`,
     );
   }
 
   return { verification, repository };
+}
+
+async function requireVerifiedMember(input: {
+  verification: NonNullable<CreateApiOptions['memberWorldId']>;
+  repository: NonNullable<CreateApiOptions['worldIdVerifications']>;
+  profileId: string;
+  request: FastifyRequest;
+}): Promise<void> {
+  const verified = await input.repository.isVerified({
+    profileId: input.profileId,
+    action: input.verification.publicConfig().action,
+  });
+
+  if (!verified) {
+    throw new DomainConflictError(
+      'world_id_verification_required',
+      `The Member must complete World ID verification before this action (${input.request.id})`,
+    );
+  }
 }
 
 async function requireAgentRegistration(input: {
@@ -533,24 +578,18 @@ export function createApi(options: CreateApiOptions = {}): FastifyInstance {
   app.post('/v1/listings', async (request, reply) => {
     const input = listingBody.parse(request.body);
 
-    if (options.hostWorldId || options.worldIdVerifications) {
-      const worldId = requireHostWorldId(
-        options.hostWorldId,
+    if (options.memberWorldId || options.worldIdVerifications) {
+      const worldId = requireMemberWorldId(
+        options.memberWorldId,
         options.worldIdVerifications,
         request,
       );
-      const verified = await worldId.repository.isVerified({
+      await requireVerifiedMember({
+        verification: worldId.verification,
+        repository: worldId.repository,
         profileId: input.hostProfileId,
-        role: 'host',
-        action: worldId.verification.publicConfig().action,
+        request,
       });
-
-      if (!verified) {
-        throw new DomainConflictError(
-          'world_id_verification_required',
-          'The Host must complete World ID verification before creating a Listing',
-        );
-      }
     }
 
     const detail = await requireMarketplace(options.marketplace, request).createListingDraft({
@@ -645,21 +684,33 @@ export function createApi(options: CreateApiOptions = {}): FastifyInstance {
     return reply.code(201).send(quoteDto(quote));
   });
 
-  app.get('/v1/world-id/host/config', (request) => {
-    const worldId = requireHostWorldId(options.hostWorldId, options.worldIdVerifications, request);
+  const getWorldIdMemberConfig = (request: FastifyRequest) => {
+    const worldId = requireMemberWorldId(
+      options.memberWorldId,
+      options.worldIdVerifications,
+      request,
+    );
 
     return worldId.verification.publicConfig();
-  });
+  };
 
-  app.post('/v1/world-id/host/rp-signature', (request) => {
-    const worldId = requireHostWorldId(options.hostWorldId, options.worldIdVerifications, request);
+  const createWorldIdMemberRpContext = (request: FastifyRequest) => {
+    const worldId = requireMemberWorldId(
+      options.memberWorldId,
+      options.worldIdVerifications,
+      request,
+    );
 
     return worldId.verification.createRpContext();
-  });
+  };
 
-  app.post('/v1/world-id/host/verify', async (request) => {
+  const verifyWorldIdMember = async (request: FastifyRequest) => {
     const input = worldIdProofBody.parse(request.body);
-    const worldId = requireHostWorldId(options.hostWorldId, options.worldIdVerifications, request);
+    const worldId = requireMemberWorldId(
+      options.memberWorldId,
+      options.worldIdVerifications,
+      request,
+    );
     const config = worldId.verification.publicConfig();
     const verified = await worldId.verification.verifyProof({
       proof: input.proof,
@@ -667,7 +718,6 @@ export function createApi(options: CreateApiOptions = {}): FastifyInstance {
     });
     const status = await worldId.repository.record({
       profileId: input.profileId,
-      role: 'host',
       provider: verified.provider,
       credential: verified.credential,
       action: config.action,
@@ -684,9 +734,30 @@ export function createApi(options: CreateApiOptions = {}): FastifyInstance {
       environment: verified.environment,
       status,
     };
-  });
+  };
+
+  app.get('/v1/world-id/member/config', getWorldIdMemberConfig);
+  app.post('/v1/world-id/member/rp-signature', createWorldIdMemberRpContext);
+  app.post('/v1/world-id/member/verify', verifyWorldIdMember);
+
+  // Keep the original Host URLs during the deployed client transition.
+  app.get('/v1/world-id/host/config', getWorldIdMemberConfig);
+  app.post('/v1/world-id/host/rp-signature', createWorldIdMemberRpContext);
+  app.post('/v1/world-id/host/verify', verifyWorldIdMember);
 
   app.post('/v1/agents/guest/world-connection', async (request) => {
+    const input = worldConnectionBody.parse(request.body);
+    const memberWorldId = requireMemberWorldId(
+      options.memberWorldId,
+      options.worldIdVerifications,
+      request,
+    );
+    await requireVerifiedMember({
+      verification: memberWorldId.verification,
+      repository: memberWorldId.repository,
+      profileId: input.profileId,
+      request,
+    });
     const agent = requireWorldGuestAgent(options.worldGuestAgent, request);
     const world = await agent.getConnectionStatus();
     const graphSignal = await requireAgentRegistration({
@@ -699,6 +770,91 @@ export function createApi(options: CreateApiOptions = {}): FastifyInstance {
       ...world,
       onchainSignal: graphSignalDto(graphSignal, options.requiredAgentCapability ?? 'unconfigured'),
     };
+  });
+
+  app.post('/v1/agents/guest/secure-match', async (request, reply) => {
+    const input = guestAgentSecureMatchBody.parse(request.body);
+    const idempotencyKey = z.string().min(8).max(200).parse(request.headers['idempotency-key']);
+    const memberWorldId = requireMemberWorldId(
+      options.memberWorldId,
+      options.worldIdVerifications,
+      request,
+    );
+    await requireVerifiedMember({
+      verification: memberWorldId.verification,
+      repository: memberWorldId.repository,
+      profileId: input.guestProfileId,
+      request,
+    });
+
+    const marketplace = requireMarketplace(options.marketplace, request);
+    const searchResult = await requireMarketplaceAgents(options.marketplaceAgents, request).search({
+      query: input.query,
+    });
+
+    if (searchResult.status === 'needs_clarification') {
+      return {
+        status: 'needs_clarification',
+        question: searchResult.question,
+        agent: {
+          interpretation: searchResult.interpretationExecution,
+        },
+      };
+    }
+
+    const [selectedMatch] = searchResult.recommendations;
+
+    if (!selectedMatch) {
+      return {
+        status: 'no_match',
+        mandate: searchResult.interpretation,
+        totalMatches: searchResult.totalMatches,
+        agent: {
+          interpretation: searchResult.interpretationExecution,
+          ranking: searchResult.rankingExecution,
+        },
+      };
+    }
+
+    const quote = await marketplace.createQuote({
+      listingId: selectedMatch.listing.id,
+      guestProfileId: input.guestProfileId,
+      stayRange: StayRange.fromStrings({
+        checkIn: searchResult.interpretation.checkIn,
+        checkOut: searchResult.interpretation.checkOut,
+      }),
+    });
+    const agentResponse = await requireWorldGuestAgent(
+      options.worldGuestAgent,
+      request,
+    ).createReservationHold({
+      quoteId: quote.id,
+      idempotencyKey,
+    });
+    const reservation: unknown = await agentResponse.json();
+
+    if (!agentResponse.ok) {
+      return reply.header('cache-control', 'no-store').code(agentResponse.status).send(reservation);
+    }
+
+    return reply
+      .header('cache-control', 'no-store')
+      .code(agentResponse.status)
+      .send({
+        status: 'secured',
+        mandate: searchResult.interpretation,
+        selectedMatch: {
+          listing: listingDto(selectedMatch.listing),
+          summary: selectedMatch.summary,
+          matchReasons: selectedMatch.matchReasons,
+        },
+        quote: quoteDto(quote),
+        reservation,
+        agent: {
+          interpretation: searchResult.interpretationExecution,
+          ranking: searchResult.rankingExecution,
+        },
+      });
   });
 
   app.post('/v1/agents/guest/reservation-holds', async (request, reply) => {
@@ -719,6 +875,23 @@ export function createApi(options: CreateApiOptions = {}): FastifyInstance {
   app.post('/v1/reservation-holds', async (request, reply) => {
     const input = holdBody.parse(request.body);
     const idempotencyKey = z.string().min(8).max(200).parse(request.headers['idempotency-key']);
+
+    if (options.memberWorldId || options.worldIdVerifications) {
+      const marketplace = requireMarketplace(options.marketplace, request);
+      const quote = await marketplace.getQuote(input.quoteId);
+      const memberWorldId = requireMemberWorldId(
+        options.memberWorldId,
+        options.worldIdVerifications,
+        request,
+      );
+      await requireVerifiedMember({
+        verification: memberWorldId.verification,
+        repository: memberWorldId.repository,
+        profileId: quote.guestProfileId,
+        request,
+      });
+    }
+
     const world = requireHumanBackedAuthorization(
       options.humanBackedAuthorization,
       options.worldResourceUri,

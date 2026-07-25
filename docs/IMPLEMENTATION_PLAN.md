@@ -231,14 +231,16 @@ Completed exit evidence:
 
 Estimate: 4–7 focused hours
 
-Status: Guest AgentKit completed and verified live on 2026-07-25; Host World
-IDKit implemented locally, with hosted configuration and migration pending.
+Status: Guest AgentKit completed and verified live on 2026-07-25; direct World
+IDKit Member onboarding is implemented locally for both Host and Guest, with
+the Member action and hosted migrations pending.
 
 Implement:
 
-- Host Proof of Human through the real IDKit World App QR flow;
-- server-signed RP context and server-side Host proof verification;
-- private, action-specific Host nullifier persistence;
+- Member Proof of Human for Host and Guest through the real IDKit World App QR
+  flow;
+- server-signed RP context and server-side Member proof verification;
+- private, action-specific Member nullifier persistence;
 - Agent wallet registration flow;
 - AgentKit client for the Guest Agent;
 - protected hold or Booking endpoint;
@@ -249,6 +251,7 @@ Implement:
 Exit check:
 
 - Host cannot create a Listing before a valid World ID proof;
+- Guest cannot connect an Agent or hold dates before a valid World ID proof;
 - unverified Agent can browse but cannot hold dates;
 - human-backed Agent can create one valid hold;
 - replay is rejected;
@@ -256,8 +259,8 @@ Exit check:
 
 Local evidence:
 
-- the guided Host UI has no demo bypass and shows Continue only after the API
-  verifies the World ID result;
+- both guided role paths have no demo bypass and continue only after the API
+  verifies the direct Member World ID result;
 - API tests prove safe configuration, server-signed RP context, proof
   verification, private persistence, and nullifier redaction;
 - the official AgentKit client completes the `402` challenge and signed retry;
@@ -336,6 +339,9 @@ remains.
 - turn natural language into typed search filters;
 - rank only database-filtered candidates;
 - explain match and policy results.
+- accept one Guest-approved Agent Mandate;
+- select the top valid match, create its deterministic quote, and request one
+  protected Reservation Hold;
 
 ### Guardrails
 
@@ -365,6 +371,9 @@ Implemented locally:
 - ranking restricted to exact valid Listing IDs;
 - deterministic Host, search-interpretation, and ranking fallback;
 - API and UI evidence distinguishing live OpenAI from fallback execution;
+- idempotent secure-best-match orchestration that reuses the same search,
+  pricing, World, Graph, hold, and stored approval-policy boundaries as the
+  manual path;
 - negative tests for field smuggling, invented Listing IDs, invalid hard
   filters, provider failure, and private or financial draft claims.
 
@@ -420,7 +429,9 @@ If time is limited, protect this path:
 
 ```text
 seeded Listing
+  -> direct Guest World ID Member verification
   -> Guest Agent search
+  -> one secure-best-match Agent Mandate
   -> World rejects unverified Agent
   -> World accepts human-backed Agent
   -> The Graph returns live Agent registration
@@ -453,9 +464,10 @@ Provider access or registration delays may add time.
 
 ## Next coding task
 
-Configure and live-test Host World ID, complete the Phase 8 live smoke test,
-then prioritize deployment and demo hardening. The real Phase 9 projection may
-follow after the UI tracer is ready:
+Create the `nook-member-onboarding` World action, apply the two pending World ID
+migrations, live-test both role onboarding paths, and then deploy the updated
+API and web application. Complete the Phase 8 live OpenAI smoke test after that.
+The real Phase 9 projection may follow after the UI tracer is ready:
 
 ```text
 chore: harden deployed demo flow

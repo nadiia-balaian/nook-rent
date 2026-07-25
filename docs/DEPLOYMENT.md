@@ -39,6 +39,7 @@ WORLD_AGENT_WALLET_PRIVATE_KEY=<registered Agent wallet key>
 WORLD_ID_APP_ID=<World app id>
 WORLD_ID_RP_ID=<World relying-party id>
 WORLD_ID_SIGNING_KEY=<World signing key>
+WORLD_ID_ACTION=nook-member-onboarding
 WORLD_ID_ENVIRONMENT=production
 
 THE_GRAPH_API_KEY=<gateway API key>
@@ -87,7 +88,8 @@ that value.
 2. Open `/ready` and expect `status: "ready"`.
 3. Open the web deployment and confirm it does not show the API-unavailable
    banner.
-4. Complete the Guest verification step and confirm both World and The Graph
+4. Complete direct Guest World ID verification, connect the Guest Agent, and
+   confirm World Agent and The Graph
    badges appear.
 5. Complete the Host verification step in World App.
 6. Create a Listing, search, quote, hold, and Testnet deposit.

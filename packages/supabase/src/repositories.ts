@@ -122,7 +122,6 @@ export class PostgresMemberProfileRepository implements MemberProfileRepositoryP
 
 export interface RecordWorldIdVerificationInput {
   profileId: string;
-  role: 'host';
   provider: 'world_id';
   credential: 'proof_of_human';
   action: string;
@@ -135,12 +134,12 @@ export interface RecordWorldIdVerificationInput {
 export class PostgresWorldIdVerificationRepository {
   constructor(private readonly sql: PostgresClient) {}
 
-  async isVerified(input: { profileId: string; role: 'host'; action: string }): Promise<boolean> {
+  async isVerified(input: { profileId: string; action: string }): Promise<boolean> {
     const [verification] = await this.sql<{ verified: boolean }[]>`
       select true as verified
       from nook.world_id_verifications
       where profile_id = ${input.profileId}
-        and role = ${input.role}
+        and role = 'member'
         and action = ${input.action}
       limit 1
     `;
@@ -153,7 +152,7 @@ export class PostgresWorldIdVerificationRepository {
       select profile_id, nullifier::text
       from nook.world_id_verifications
       where profile_id = ${input.profileId}
-        and role = ${input.role}
+        and role = 'member'
         and action = ${input.action}
     `;
 
@@ -164,7 +163,7 @@ export class PostgresWorldIdVerificationRepository {
 
       throw new DomainConflictError(
         'world_id_already_bound',
-        'This Host profile is already bound to another World ID verification',
+        'This Member profile is already bound to another World ID verification',
       );
     }
 
@@ -178,7 +177,7 @@ export class PostgresWorldIdVerificationRepository {
     if (humanVerification && humanVerification.profile_id !== input.profileId) {
       throw new DomainConflictError(
         'world_id_already_bound',
-        'This World ID verification is already bound to another Host profile',
+        'This World ID verification is already bound to another Member profile',
       );
     }
 
@@ -196,7 +195,7 @@ export class PostgresWorldIdVerificationRepository {
       )
       values (
         ${input.profileId},
-        ${input.role},
+        'member',
         ${input.provider},
         ${input.credential},
         ${input.action},

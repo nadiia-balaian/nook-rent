@@ -35,7 +35,7 @@ import {
   parseOptionalWorldIdEnvironment,
   parseOptionalWorldVerifierEnvironment,
   WorldAgentkitAuthorization,
-  WorldIdHostVerification,
+  WorldIdMemberVerification,
 } from '@nook-rent/world';
 import Fastify from 'fastify';
 
@@ -84,8 +84,8 @@ const worldGuestAgent = worldGuestAgentEnvironment
     })
   : undefined;
 const worldIdEnvironment = parseOptionalWorldIdEnvironment(process.env);
-const hostWorldId = worldIdEnvironment
-  ? new WorldIdHostVerification(worldIdEnvironment)
+const memberWorldId = worldIdEnvironment
+  ? new WorldIdMemberVerification(worldIdEnvironment)
   : undefined;
 const worldIdVerifications = worldIdEnvironment
   ? new PostgresWorldIdVerificationRepository(sql)
@@ -135,7 +135,7 @@ const app = createApi({
       }
     : {}),
   ...(worldGuestAgent ? { worldGuestAgent } : {}),
-  ...(hostWorldId && worldIdVerifications ? { hostWorldId, worldIdVerifications } : {}),
+  ...(memberWorldId && worldIdVerifications ? { memberWorldId, worldIdVerifications } : {}),
   ...(agentRegistrationSignals && graphEnvironment
     ? {
         agentRegistrationSignals,

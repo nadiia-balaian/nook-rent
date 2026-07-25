@@ -161,16 +161,19 @@ registration bound to the human-backed signing wallet and the named
 
 ## Demo order
 
-1. Host publishes a Listing with dates and automatic-approval policy.
-2. Guest Agent searches for a valid 3–90-night stay.
-3. Unverified Agent attempts a hold and is denied.
-4. World proves the Agent is human-backed.
-5. The Graph returns its live Agent registration and capability.
-6. Nook.rent atomically holds the dates.
-7. Rental Reputation qualifies the experienced Guest for automatic approval.
-8. Guest Agent locks the real Hedera Testnet deposit.
-9. Booking is confirmed with Mirror Node and HCS evidence.
-10. A Newcomer request demonstrates the fair Host-review path.
+1. Host completes World ID Member verification and publishes a Listing with
+   dates and automatic-approval policy.
+2. Guest completes World ID Member verification and connects the Guest Agent.
+3. Guest Agent searches for a valid 3–90-night stay.
+4. Guest authorizes one Agent Mandate to secure the top valid match.
+5. Unverified Member or Agent attempts a hold and is denied.
+6. World proves the Agent is human-backed.
+7. The Graph returns its live Agent registration and capability.
+8. Nook.rent atomically holds the dates.
+9. Stored policy uses Rental Reputation to auto-approve the experienced Guest.
+10. Guest funds the real Hedera Testnet deposit.
+11. Booking is confirmed with Mirror Node and HCS evidence.
+12. A Newcomer request demonstrates the fair Host-review path.
 
 One story should prove all three integrations without separate disconnected
 demos.

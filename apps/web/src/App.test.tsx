@@ -26,7 +26,7 @@ vi.mock('@worldcoin/idkit', () => ({
             const proof = {
               protocol_version: '4.0',
               nonce: 'world-id-test-nonce',
-              action: 'nook-host-onboarding',
+              action: 'nook-member-onboarding',
               environment: 'staging',
               responses: [],
             };
@@ -217,17 +217,17 @@ function installMarketplaceApi(
       if (url.pathname === '/ready') {
         return Promise.resolve(jsonResponse({ service: 'nook-api', status: 'ready' }));
       }
-      if (url.pathname === '/v1/world-id/host/config') {
+      if (url.pathname === '/v1/world-id/member/config') {
         return Promise.resolve(
           jsonResponse({
             appId: 'app_nook_test',
             rpId: 'rp_nook_test',
-            action: 'nook-host-onboarding',
+            action: 'nook-member-onboarding',
             environment: 'staging',
           }),
         );
       }
-      if (url.pathname === '/v1/world-id/host/rp-signature') {
+      if (url.pathname === '/v1/world-id/member/rp-signature') {
         return Promise.resolve(
           jsonResponse({
             rp_id: 'rp_nook_test',
@@ -238,7 +238,7 @@ function installMarketplaceApi(
           }),
         );
       }
-      if (url.pathname === '/v1/world-id/host/verify') {
+      if (url.pathname === '/v1/world-id/member/verify') {
         return Promise.resolve(
           jsonResponse({
             provider: 'world_id',
@@ -394,6 +394,48 @@ function installMarketplaceApi(
           }),
         );
       }
+      if (url.pathname === '/v1/agents/guest/secure-match') {
+        return Promise.resolve(
+          jsonResponse(
+            {
+              status: 'secured',
+              mandate: {
+                status: 'ready',
+                city: 'Lisbon',
+                checkIn: '2026-08-20',
+                checkOut: '2026-08-25',
+                guests: 1,
+                maximumNightlyRateAtomic: '15000',
+                requiredAmenities: ['wifi'],
+              },
+              selectedMatch: {
+                listing,
+                summary: 'The best valid work-friendly match.',
+                matchReasons: ['Includes wifi', 'Within the nightly limit'],
+              },
+              quote: {
+                ...quote,
+                guestProfileId: initialReservation.booking.guestProfileId,
+                reputationTier: mode === 'manual' ? 'newcomer' : 'silver',
+              },
+              reservation: initialReservation,
+              agent: {
+                interpretation: {
+                  provider: 'openai',
+                  mode: 'live',
+                  model: 'test-model',
+                },
+                ranking: {
+                  provider: 'openai',
+                  mode: 'live',
+                  model: 'test-model',
+                },
+              },
+            },
+            201,
+          ),
+        );
+      }
       if (url.pathname === '/v1/agents/guest/reservation-holds') {
         return Promise.resolve(jsonResponse(initialReservation));
       }
@@ -439,11 +481,18 @@ afterEach(() => {
 });
 
 describe('Nook marketplace demo', () => {
+  async function completeMemberWorldId(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(screen.getByRole('button', { name: 'Verify with World ID' }));
+    await user.click(await screen.findByRole('button', { name: 'Complete World ID verification' }));
+    expect((await screen.findAllByText('World ID verified')).length).toBeGreaterThan(0);
+  }
+
   async function enterGuestSearch(user: ReturnType<typeof userEvent.setup>) {
     await user.click(screen.getByRole('button', { name: 'Get started' }));
     await user.click(screen.getByRole('button', { name: /I’m looking for a place/ }));
+    await completeMemberWorldId(user);
     await user.click(screen.getByRole('button', { name: 'Connect World-backed Agent' }));
-    expect(await screen.findByText('World verified')).toBeTruthy();
+    expect(await screen.findByText('World Agent verified')).toBeTruthy();
     expect(screen.getByText('The Graph verified')).toBeTruthy();
     await user.click(screen.getByRole('button', { name: 'Continue' }));
     expect(screen.getByRole('heading', { name: 'Where to?' })).toBeTruthy();
@@ -452,9 +501,7 @@ describe('Nook marketplace demo', () => {
   async function enterHostCreate(user: ReturnType<typeof userEvent.setup>) {
     await user.click(screen.getByRole('button', { name: 'Get started' }));
     await user.click(screen.getByRole('button', { name: /I want to rent out my place/ }));
-    await user.click(screen.getByRole('button', { name: 'Verify with World ID' }));
-    await user.click(await screen.findByRole('button', { name: 'Complete World ID verification' }));
-    expect(await screen.findByText('Private Proof of Human')).toBeTruthy();
+    await completeMemberWorldId(user);
     await user.click(screen.getByRole('button', { name: 'Continue' }));
     expect(screen.getByRole('heading', { name: 'Show us your nook.' })).toBeTruthy();
   }
@@ -489,10 +536,7 @@ describe('Nook marketplace demo', () => {
     expect(await screen.findByText(listing.title)).toBeTruthy();
     expect(screen.getByText('The best valid work-friendly match.')).toBeTruthy();
 
-    await user.click(screen.getByRole('button', { name: 'View nook' }));
-    expect(await screen.findByText('Exact Booking Quote')).toBeTruthy();
-
-    await user.click(screen.getByRole('button', { name: 'Request this nook' }));
+    await user.click(screen.getByRole('button', { name: 'Secure best match' }));
     expect(
       await screen.findByRole('heading', { name: 'Approved—your deposit is next.' }),
     ).toBeTruthy();
@@ -514,6 +558,9 @@ describe('Nook marketplace demo', () => {
     await enterGuestSearch(user);
 
     await user.click(screen.getByRole('button', { name: /Jo/ }));
+    await completeMemberWorldId(user);
+    await user.click(screen.getByRole('button', { name: 'Connect World-backed Agent' }));
+    await user.click(await screen.findByRole('button', { name: 'Continue' }));
     await user.click(screen.getByRole('button', { name: 'Find available nooks' }));
     await user.click(await screen.findByRole('button', { name: 'View nook' }));
     await user.click(await screen.findByRole('button', { name: 'Request this nook' }));
@@ -537,11 +584,30 @@ describe('Nook marketplace demo', () => {
     render(<App />);
     await user.click(screen.getByRole('button', { name: 'Get started' }));
     await user.click(screen.getByRole('button', { name: /I’m looking for a place/ }));
+    await completeMemberWorldId(user);
     await user.click(screen.getByRole('button', { name: 'Connect World-backed Agent' }));
 
     expect(
       await screen.findByText('World could not confirm that this Agent acts for a verified human.'),
     ).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Continue' })).toBeNull();
+  });
+
+  it('requires direct World ID before a Guest can connect the Agent', async () => {
+    installMarketplaceApi('automatic');
+    const user = userEvent.setup();
+
+    render(<App />);
+    await user.click(screen.getByRole('button', { name: 'Get started' }));
+    await user.click(screen.getByRole('button', { name: /I’m looking for a place/ }));
+
+    expect(screen.getByRole('button', { name: 'Verify with World ID' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Connect World-backed Agent' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Continue' })).toBeNull();
+
+    await completeMemberWorldId(user);
+
+    expect(screen.getByRole('button', { name: 'Connect World-backed Agent' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Continue' })).toBeNull();
   });
 
@@ -556,10 +622,8 @@ describe('Nook marketplace demo', () => {
     expect(screen.getByRole('button', { name: 'Verify with World ID' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Continue' })).toBeNull();
 
-    await user.click(screen.getByRole('button', { name: 'Verify with World ID' }));
-    await user.click(await screen.findByRole('button', { name: 'Complete World ID verification' }));
+    await completeMemberWorldId(user);
 
-    expect((await screen.findAllByText('World ID verified')).length).toBeGreaterThan(0);
     expect(screen.getByRole('button', { name: 'Continue' })).toBeTruthy();
   });
 

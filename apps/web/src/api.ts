@@ -170,7 +170,7 @@ export interface WorldConnection {
   onchainSignal: NonNullable<ReservationResult['onchainSignal']>;
 }
 
-export interface WorldIdHostConfig {
+export interface WorldIdMemberConfig {
   appId: `app_${string}`;
   rpId: `rp_${string}`;
   action: string;
@@ -185,7 +185,7 @@ export interface WorldIdRpContext {
   signature: string;
 }
 
-export interface WorldIdHostVerification {
+export interface WorldIdMemberVerification {
   provider: 'world_id';
   credential: 'proof_of_human';
   humanVerified: true;
@@ -303,6 +303,33 @@ export type GuestAgentSearchResult =
       };
     };
 
+export type AgentSecureMatchResult =
+  | {
+      status: 'needs_clarification';
+      question: string;
+      agent: {
+        interpretation: AgentExecution;
+      };
+    }
+  | {
+      status: 'no_match';
+      mandate: Extract<GuestAgentSearchResult, { status: 'ready' }>['interpretation'];
+      totalMatches: number;
+      agent: Extract<GuestAgentSearchResult, { status: 'ready' }>['agent'];
+    }
+  | {
+      status: 'secured';
+      mandate: Extract<GuestAgentSearchResult, { status: 'ready' }>['interpretation'];
+      selectedMatch: {
+        listing: Listing;
+        summary: string;
+        matchReasons: string[];
+      };
+      quote: BookingQuote;
+      reservation: ReservationResult;
+      agent: Extract<GuestAgentSearchResult, { status: 'ready' }>['agent'];
+    };
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...init,
@@ -350,20 +377,21 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 export const nookApi = {
   readiness: () => request<{ service: string; status: 'ready' }>('/ready'),
 
-  connectWorldAgent: () =>
+  connectWorldAgent: (profileId: string) =>
     request<WorldConnection>('/v1/agents/guest/world-connection', {
       method: 'POST',
+      body: JSON.stringify({ profileId }),
     }),
 
-  hostWorldIdConfig: () => request<WorldIdHostConfig>('/v1/world-id/host/config'),
+  memberWorldIdConfig: () => request<WorldIdMemberConfig>('/v1/world-id/member/config'),
 
-  createHostWorldIdRpContext: () =>
-    request<WorldIdRpContext>('/v1/world-id/host/rp-signature', {
+  createMemberWorldIdRpContext: () =>
+    request<WorldIdRpContext>('/v1/world-id/member/rp-signature', {
       method: 'POST',
     }),
 
-  verifyHostWorldId: (input: { profileId: string; proof: unknown }) =>
-    request<WorldIdHostVerification>('/v1/world-id/host/verify', {
+  verifyMemberWorldId: (input: { profileId: string; proof: unknown }) =>
+    request<WorldIdMemberVerification>('/v1/world-id/member/verify', {
       method: 'POST',
       body: JSON.stringify(input),
     }),
@@ -389,6 +417,18 @@ export const nookApi = {
     request<GuestAgentSearchResult>('/v1/agents/guest/search', {
       method: 'POST',
       body: JSON.stringify({ query }),
+    }),
+
+  secureBestMatch: (input: { guestProfileId: string; query: string; idempotencyKey: string }) =>
+    request<AgentSecureMatchResult>('/v1/agents/guest/secure-match', {
+      method: 'POST',
+      headers: {
+        'idempotency-key': input.idempotencyKey,
+      },
+      body: JSON.stringify({
+        guestProfileId: input.guestProfileId,
+        query: input.query,
+      }),
     }),
 
   searchListings: (input: SearchInput) => {

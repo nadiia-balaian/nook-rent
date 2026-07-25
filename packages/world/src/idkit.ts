@@ -3,7 +3,8 @@ import { z } from 'zod';
 
 import type { WorldIdEnvironment } from './environment.js';
 
-export const HOST_WORLD_ID_ACTION = 'nook-host-onboarding';
+export const MEMBER_WORLD_ID_ACTION = 'nook-member-onboarding';
+export const HOST_WORLD_ID_ACTION = MEMBER_WORLD_ID_ACTION;
 
 const worldIdResponseSchema = z
   .object({
@@ -41,7 +42,7 @@ export interface WorldIdVerificationResult {
   protocolVersion: '3.0' | '4.0';
 }
 
-export class WorldIdHostVerification {
+export class WorldIdMemberVerification {
   constructor(
     private readonly environment: WorldIdEnvironment,
     private readonly fetch: typeof globalThis.fetch = globalThis.fetch,
@@ -51,7 +52,7 @@ export class WorldIdHostVerification {
     return {
       appId: this.environment.appId,
       rpId: this.environment.rpId,
-      action: HOST_WORLD_ID_ACTION,
+      action: this.environment.action,
       environment: this.environment.environment,
     };
   }
@@ -59,7 +60,7 @@ export class WorldIdHostVerification {
   createRpContext(): RpContext {
     const signature = signRequest({
       signingKeyHex: this.environment.signingKey,
-      action: HOST_WORLD_ID_ACTION,
+      action: this.environment.action,
     });
 
     return {
@@ -84,7 +85,7 @@ export class WorldIdHostVerification {
       );
     }
 
-    if (parsed.data.action !== HOST_WORLD_ID_ACTION) {
+    if (parsed.data.action !== this.environment.action) {
       throw new WorldIdVerificationError(
         'invalid_world_id_proof',
         'World ID proof is bound to a different action',
@@ -106,7 +107,7 @@ export class WorldIdHostVerification {
     if (!response || response.signal_hash.toLowerCase() !== expectedSignalHash) {
       throw new WorldIdVerificationError(
         'invalid_world_id_proof',
-        'World ID proof is not bound to the expected Host profile',
+        'World ID proof is not bound to the expected Member profile',
       );
     }
 
@@ -145,3 +146,5 @@ export class WorldIdHostVerification {
     };
   }
 }
+
+export { WorldIdMemberVerification as WorldIdHostVerification };

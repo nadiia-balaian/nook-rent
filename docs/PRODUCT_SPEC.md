@@ -66,7 +66,7 @@ A Member can be a Host, a Guest, or both.
 
 ### Host
 
-- proves human-backed control of the Host Agent;
+- completes World ID Member verification;
 - creates and reviews Listing drafts;
 - controls Availability Windows and house rules;
 - selects an Approval Policy;
@@ -75,6 +75,7 @@ A Member can be a Host, a Guest, or both.
 
 ### Guest
 
+- completes World ID Member verification;
 - proves human-backed control of the Guest Agent;
 - searches and compares Listings;
 - reviews a Booking Quote;
@@ -86,7 +87,7 @@ A Member can be a Host, a Guest, or both.
 ## 6. Host flow
 
 1. Create a Nook.rent profile.
-2. Complete the required human-backed authorization flow.
+2. Complete World ID Member verification.
 3. Provide Listing details, photos, approximate location, amenities, rules,
    nightly rate, and available dates.
 4. The Host Agent prepares a structured draft and clearly marks inferred
@@ -103,18 +104,21 @@ An AI-generated Listing never becomes public without Host confirmation.
 ## 7. Guest flow
 
 1. Create a Nook.rent profile.
-2. Complete the required human-backed authorization flow.
-3. Ask the Guest Agent for a city, date range, budget, occupancy, and essential
+2. Complete World ID Member verification.
+3. Connect a World-backed Guest Agent with the required live Agent capability.
+4. Ask the Guest Agent for a city, date range, budget, occupancy, and essential
    amenities.
-4. Nook.rent applies hard filters to stored Listing data.
-5. The Guest Agent ranks only valid results and explains the match.
-6. The Guest reviews public Host information, named Onchain Signals, Rental
+5. Nook.rent applies hard filters to stored Listing data.
+6. The Guest Agent ranks only valid results and explains the match.
+7. The Guest either reviews a Listing manually or authorizes a one-time Agent
+   Mandate to select the top valid match, accept its deterministic Booking
+   Quote, and request one Reservation Hold.
+8. The Guest reviews public Host information, named Onchain Signals, Rental
    Reputation where available, and the Booking Quote.
-7. The Guest requests a Reservation Hold.
-8. Nook.rent evaluates the Host's Approval Policy.
-9. The request is approved automatically or sent to Host review.
-10. The Guest funds escrow.
-11. Nook.rent confirms the Booking only after the hold and financial operation
+9. Nook.rent evaluates the Host's Approval Policy.
+10. The request is approved automatically or sent to Host review.
+11. The Guest funds escrow.
+12. Nook.rent confirms the Booking only after the hold and financial operation
     are reconciled.
 
 ## 8. Approval
@@ -143,22 +147,26 @@ infer risk from missing wallet activity.
 
 World has two deliberately separate responsibilities:
 
-- World ID provides an action-specific Proof of Human before a Host creates a
-  Listing;
+- World ID provides an action-specific Proof of Human for every Member before
+  protected Host or Guest actions;
 - World AgentKit provides human-backed authorization for protected Guest Agent
   actions.
 
 The integrations must be meaningful and end to end:
 
-- a Host cannot continue to Listing creation until World ID is verified;
+- a Host or Guest cannot continue through onboarding until World ID is
+  verified;
+- a Guest cannot connect the Guest Agent until the Guest profile has a valid
+  Member verification;
 - an unverified Agent can browse public Listings;
 - an unverified Agent cannot reserve dates or initiate payment;
-- a verified human-backed Agent can request one valid hold;
+- a verified human-backed Agent can execute one Guest-approved Agent Mandate
+  and request one valid hold;
 - replay and repeated-hold abuse are prevented per anonymous human.
 
-World proofs are processed server-side and are not published to HCS. Host World
-ID verification stores only the private action-specific nullifier required to
-prevent reuse; the browser receives only a verified result.
+World proofs are processed server-side and are not published to HCS. Member
+World ID verification stores only the private action-specific nullifier
+required to prevent reuse; the browser receives only a verified result.
 
 ## 10. The Graph
 
@@ -283,6 +291,11 @@ Forbidden:
 - expose Check-in Instructions;
 - override availability or stored policy.
 
+The Guest Agent may select the highest-ranked Listing only after deterministic
+hard filtering. It may create the stored quote and request a hold under a
+one-time Agent Mandate. The Agent does not approve the request: the stored Host
+Approval Policy returns automatic approval or the Host review path.
+
 ## 17. MVP API surface
 
 The exact HTTP representation may evolve, but the MVP requires these
@@ -291,6 +304,12 @@ capabilities:
 ```text
 POST   /v1/profiles
 POST   /v1/agents/verify
+GET    /v1/world-id/member/config
+POST   /v1/world-id/member/rp-signature
+POST   /v1/world-id/member/verify
+POST   /v1/agents/guest/world-connection
+POST   /v1/agents/guest/search
+POST   /v1/agents/guest/secure-match
 POST   /v1/listings/drafts
 POST   /v1/listings
 GET    /v1/listings
@@ -320,12 +339,14 @@ Seed:
 The demo succeeds when it shows:
 
 1. Host Agent creates a Listing draft and Host publishes it.
-2. Guest Agent finds a valid Listing for 3–90 nights.
-3. An unverified Agent is denied a hold.
-4. A human-backed Agent passes World authorization.
-5. The Graph supplies a live Agent registration signal.
-6. Experienced Guest receives automatic approval.
-7. Newcomer receives fair Host review.
-8. A real Hedera Testnet deposit operation succeeds.
-9. Mirror Node confirms the transaction and HCS event.
-10. Conflicting dates cannot be booked twice.
+2. Host and Guest complete direct World ID Member onboarding.
+3. Guest Agent finds a valid Listing for 3–90 nights.
+4. Guest authorizes one Agent Mandate and the Agent secures the top valid match.
+5. An unverified Member or Agent is denied a hold.
+6. A human-backed Agent passes World authorization.
+7. The Graph supplies a live Agent registration signal.
+8. Experienced Guest receives automatic approval from stored Host policy.
+9. Newcomer receives fair Host review.
+10. A real Hedera Testnet deposit operation succeeds.
+11. Mirror Node confirms the transaction and HCS event.
+12. Conflicting dates cannot be booked twice.

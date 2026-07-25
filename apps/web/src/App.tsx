@@ -15,6 +15,7 @@ import {
   Globe2,
   House,
   ImagePlus,
+  Info,
   KeyRound,
   LoaderCircle,
   LockKeyhole,
@@ -37,6 +38,7 @@ import {
 
 import {
   type AgentExecution,
+  type AgentSecureMatchResult,
   type BookingQuote,
   type DepositResult,
   type GuestAgentSearchResult,
@@ -48,8 +50,8 @@ import {
   type ReservationResult,
   type SearchInput,
   type WorldConnection,
-  type WorldIdHostConfig,
-  type WorldIdHostVerification,
+  type WorldIdMemberConfig,
+  type WorldIdMemberVerification,
   type WorldIdRpContext,
 } from './api.js';
 import { DEFAULT_GUEST_QUERY, DEFAULT_SEARCH, DEMO_PROFILES, type DemoGuestKey } from './demo.js';
@@ -157,7 +159,7 @@ function friendlyError(error: NookApiError): string {
     case 'hedera_unavailable':
       return 'Hedera Testnet is not configured in the API environment.';
     case 'human_backed_authorization_required':
-      return 'This protected hold needs a World-verified Guest Agent. The visual onboarding preview does not replace the live AgentKit proof.';
+      return 'This hold needs a verified World-backed Guest Agent.';
     case 'agent_not_human_backed':
       return 'World could not confirm that this Agent acts for a verified human.';
     case 'invalid_agentkit_proof':
@@ -170,14 +172,14 @@ function friendlyError(error: NookApiError): string {
       return 'World AgentKit is not configured on the API yet.';
     case 'world_id_unavailable':
       return 'World ID is not configured on the API yet.';
+    case 'world_id_verification_required':
+      return 'Complete World ID verification for this Member before continuing.';
     case 'invalid_world_id_proof':
       return 'World ID could not verify this proof. Please try again.';
     case 'world_id_provider_unavailable':
       return 'World ID verification is temporarily unavailable. Please try again.';
     case 'world_id_already_bound':
-      return 'This World ID is already connected to another Host profile.';
-    case 'world_id_verification_required':
-      return 'Verify this Host with World ID before creating a Listing.';
+      return 'This World ID is already connected to another Member profile.';
     case 'agent_not_registered':
       return 'This human-backed Agent is not registered in Agent0 yet.';
     case 'agent_registration_inactive':
@@ -216,11 +218,13 @@ export function App() {
   const [hostAgentDraft, setHostAgentDraft] = useState<HostAgentDraftResult | null>(null);
   const [createdListing, setCreatedListing] = useState<ListingDetail | null>(null);
   const [worldConnection, setWorldConnection] = useState<WorldConnection | null>(null);
-  const [hostWorldIdConfig, setHostWorldIdConfig] = useState<WorldIdHostConfig | null>(null);
-  const [hostWorldIdRpContext, setHostWorldIdRpContext] = useState<WorldIdRpContext | null>(null);
-  const [hostWorldIdOpen, setHostWorldIdOpen] = useState(false);
-  const [hostWorldIdVerification, setHostWorldIdVerification] =
-    useState<WorldIdHostVerification | null>(null);
+  const [memberWorldIdConfig, setMemberWorldIdConfig] = useState<WorldIdMemberConfig | null>(null);
+  const [memberWorldIdRpContext, setMemberWorldIdRpContext] = useState<WorldIdRpContext | null>(
+    null,
+  );
+  const [memberWorldIdOpen, setMemberWorldIdOpen] = useState(false);
+  const [memberWorldIdVerification, setMemberWorldIdVerification] =
+    useState<WorldIdMemberVerification | null>(null);
 
   const selectedGuest = DEMO_PROFILES[guestKey];
 
@@ -260,10 +264,10 @@ export function App() {
     setHostAgentDraft(null);
     setCreatedListing(null);
     setWorldConnection(null);
-    setHostWorldIdConfig(null);
-    setHostWorldIdRpContext(null);
-    setHostWorldIdOpen(false);
-    setHostWorldIdVerification(null);
+    setMemberWorldIdConfig(null);
+    setMemberWorldIdRpContext(null);
+    setMemberWorldIdOpen(false);
+    setMemberWorldIdVerification(null);
     setError(null);
   };
 
@@ -288,30 +292,32 @@ export function App() {
   const selectRole = (nextRole: DemoRole) => {
     setRole(nextRole);
     setWorldConnection(null);
-    setHostWorldIdConfig(null);
-    setHostWorldIdRpContext(null);
-    setHostWorldIdOpen(false);
-    setHostWorldIdVerification(null);
+    setMemberWorldIdConfig(null);
+    setMemberWorldIdRpContext(null);
+    setMemberWorldIdOpen(false);
+    setMemberWorldIdVerification(null);
     navigate('identity');
   };
 
   const connectWorldAgent = async () => {
-    const result = await runAction('connect-world', () => nookApi.connectWorldAgent());
+    const result = await runAction('connect-world', () =>
+      nookApi.connectWorldAgent(selectedGuest.id),
+    );
     if (result) setWorldConnection(result);
   };
 
-  const openHostWorldId = async () => {
+  const openMemberWorldId = async () => {
     setBusyAction('connect-world-id');
     setError(null);
 
     try {
       const [config, rpContext] = await Promise.all([
-        nookApi.hostWorldIdConfig(),
-        nookApi.createHostWorldIdRpContext(),
+        nookApi.memberWorldIdConfig(),
+        nookApi.createMemberWorldIdRpContext(),
       ]);
-      setHostWorldIdConfig(config);
-      setHostWorldIdRpContext(rpContext);
-      setHostWorldIdOpen(true);
+      setMemberWorldIdConfig(config);
+      setMemberWorldIdRpContext(rpContext);
+      setMemberWorldIdOpen(true);
     } catch (caught) {
       setError(
         caught instanceof NookApiError
@@ -323,16 +329,16 @@ export function App() {
     }
   };
 
-  const verifyHostWorldId = async (proof: IDKitResult) => {
+  const verifyMemberWorldId = async (proof: IDKitResult) => {
     setBusyAction('connect-world-id');
     setError(null);
 
     try {
-      const verification = await nookApi.verifyHostWorldId({
-        profileId: DEMO_PROFILES.host.id,
+      const verification = await nookApi.verifyMemberWorldId({
+        profileId: role === 'host' ? DEMO_PROFILES.host.id : selectedGuest.id,
         proof,
       });
-      setHostWorldIdVerification(verification);
+      setMemberWorldIdVerification(verification);
     } catch (caught) {
       const apiError =
         caught instanceof NookApiError
@@ -352,12 +358,20 @@ export function App() {
   };
 
   const changeGuest = (nextGuestKey: DemoGuestKey) => {
+    if (nextGuestKey === guestKey) return;
+
     setGuestKey(nextGuestKey);
+    setWorldConnection(null);
+    setMemberWorldIdConfig(null);
+    setMemberWorldIdRpContext(null);
+    setMemberWorldIdOpen(false);
+    setMemberWorldIdVerification(null);
     setSelectedListing(null);
     setQuote(null);
     setReservation(null);
     setDeposit(null);
     setError(null);
+    navigate('identity');
   };
 
   const searchListings = async (event: FormEvent) => {
@@ -405,6 +419,33 @@ export function App() {
       setQuote(result);
       navigate('detail');
     }
+  };
+
+  const secureBestMatch = async () => {
+    const result: AgentSecureMatchResult | undefined = await runAction('reserve', () =>
+      nookApi.secureBestMatch({
+        guestProfileId: selectedGuest.id,
+        query: guestQuery,
+        idempotencyKey: `nook-agent-${selectedGuest.id}-${search.checkIn}-${search.checkOut}`,
+      }),
+    );
+
+    if (!result) return;
+
+    if (result.status === 'needs_clarification') {
+      setError(new NookApiError('agent_needs_clarification', result.question));
+      return;
+    }
+
+    if (result.status === 'no_match') {
+      setError(new NookApiError('agent_no_match', 'No available home fits this mandate.'));
+      return;
+    }
+
+    setSelectedListing(result.selectedMatch.listing);
+    setQuote(result.quote);
+    setReservation(result.reservation);
+    navigate('booking');
   };
 
   const reserveDates = async () => {
@@ -598,15 +639,15 @@ export function App() {
       case 'identity':
         return (
           <IdentityScreen
-            busy={busyAction === (role === 'guest' ? 'connect-world' : 'connect-world-id')}
+            busyAgent={busyAction === 'connect-world'}
+            busyWorldId={busyAction === 'connect-world-id'}
             connection={worldConnection}
             error={error}
-            hostVerification={hostWorldIdVerification}
+            memberVerification={memberWorldIdVerification}
             onBack={() => navigate('role')}
-            onConnect={
-              role === 'guest' ? () => void connectWorldAgent() : () => void openHostWorldId()
-            }
+            onConnectAgent={() => void connectWorldAgent()}
             onContinue={() => navigate(nextAfterOnboarding(role))}
+            onVerifyMember={() => void openMemberWorldId()}
             role={role}
           />
         );
@@ -652,6 +693,10 @@ export function App() {
             onGuestView={() => {
               setRole('guest');
               setWorldConnection(null);
+              setMemberWorldIdConfig(null);
+              setMemberWorldIdRpContext(null);
+              setMemberWorldIdOpen(false);
+              setMemberWorldIdVerification(null);
               navigate('identity');
             }}
           />
@@ -674,11 +719,14 @@ export function App() {
         return (
           <ResultsScreen
             agentSearch={guestAgentSearch}
+            agentBusy={busyAction === 'reserve'}
             busy={busyAction === 'quote'}
+            error={error}
             guestKey={guestKey}
             listings={listings}
             onBack={() => navigate('guest-search')}
             onOpen={openListing}
+            onSecure={() => void secureBestMatch()}
             search={search}
             selectedListing={selectedListing}
           />
@@ -758,21 +806,23 @@ export function App() {
         </div>
       </main>
 
-      {hostWorldIdConfig && hostWorldIdRpContext && (
+      {memberWorldIdConfig && memberWorldIdRpContext && (
         <IDKitRequestWidget
-          action={hostWorldIdConfig.action}
-          action_description="Verify a human Host before creating a home Listing"
+          action={memberWorldIdConfig.action}
+          action_description="Verify a human Member before using protected Nook marketplace actions"
           allow_legacy_proofs={false}
-          app_id={hostWorldIdConfig.appId}
-          environment={hostWorldIdConfig.environment}
-          handleVerify={verifyHostWorldId}
+          app_id={memberWorldIdConfig.appId}
+          environment={memberWorldIdConfig.environment}
+          handleVerify={verifyMemberWorldId}
           onError={handleWorldIdWidgetError}
-          onOpenChange={setHostWorldIdOpen}
-          onSuccess={() => setHostWorldIdOpen(false)}
-          open={hostWorldIdOpen}
-          preset={proofOfHuman({ signal: DEMO_PROFILES.host.id })}
+          onOpenChange={setMemberWorldIdOpen}
+          onSuccess={() => setMemberWorldIdOpen(false)}
+          open={memberWorldIdOpen}
+          preset={proofOfHuman({
+            signal: role === 'host' ? DEMO_PROFILES.host.id : selectedGuest.id,
+          })}
           require_user_presence
-          rp_context={hostWorldIdRpContext}
+          rp_context={memberWorldIdRpContext}
         />
       )}
 
@@ -927,39 +977,40 @@ function RoleScreen({
 }
 
 function IdentityScreen({
-  busy,
+  busyAgent,
+  busyWorldId,
   connection,
   error,
-  hostVerification,
+  memberVerification,
   onBack,
-  onConnect,
+  onConnectAgent,
   onContinue,
+  onVerifyMember,
   role,
 }: {
-  busy: boolean;
+  busyAgent: boolean;
+  busyWorldId: boolean;
   connection: WorldConnection | null;
   error: NookApiError | null;
-  hostVerification: WorldIdHostVerification | null;
+  memberVerification: WorldIdMemberVerification | null;
   onBack: () => void;
-  onConnect: () => void;
+  onConnectAgent: () => void;
   onContinue: () => void;
+  onVerifyMember: () => void;
   role: DemoRole;
 }) {
   const isGuest = role === 'guest';
+  const connectingAgent = isGuest && memberVerification && !connection;
 
   return (
     <FlowPage
       eyebrow="Step 2 of 2"
       onBack={onBack}
-      subtitle={
-        isGuest
-          ? 'Connect the Guest Agent that World has already verified as human-backed.'
-          : 'Prove there is a real person behind the Host profile without sharing personal identity data.'
-      }
-      title={isGuest ? 'Connect with World.' : 'Verify with World ID.'}
+      subtitle=""
+      title={connectingAgent ? 'Connect your Agent.' : 'Verify with World ID.'}
     >
       <div className="identity-card">
-        {isGuest ? (
+        {connectingAgent || connection ? (
           <div className="world-orb" aria-hidden="true">
             {Array.from({ length: 30 }).map((_, index) => (
               <span key={index} />
@@ -970,86 +1021,39 @@ function IdentityScreen({
             <Globe2 size={32} />
           </div>
         )}
-        <span className={connection || hostVerification ? 'live-badge' : 'preview-badge'}>
-          {connection
-            ? 'Verification complete'
-            : hostVerification
-              ? 'World ID verified'
-              : isGuest
-                ? 'World AgentKit'
+        <div className="identity-status-line">
+          <span className={memberVerification ? 'live-badge' : 'preview-badge'}>
+            {connection
+              ? 'Verification complete'
+              : memberVerification
+                ? 'World ID verified'
                 : 'World ID · Proof of Human'}
-        </span>
-        <h2>{isGuest ? 'A real human behind the Agent' : 'Human, without the oversharing'}</h2>
+          </span>
+          {connectingAgent && (
+            <InfoTooltip label="How World and The Graph verification works">
+              This checks that the Agent is human-backed through World and has an active Nook
+              capability through The Graph. The protected hold checks both again.
+            </InfoTooltip>
+          )}
+        </div>
+        <h2>{connectingAgent ? 'Your Agent, backed by you' : 'Human, without the oversharing'}</h2>
         <p>
-          {isGuest
-            ? 'World confirms that the Guest Agent is backed by a unique human. The browser never receives its wallet key or World identifier.'
+          {connectingAgent
+            ? 'Connect the Agent that can search, select, and secure an eligible home within your mandate.'
             : 'Scan the live World ID QR code in World App. Nook stores only a private, action-specific verification—not your name, wallet, or exact address.'}
         </p>
         <div className="privacy-first">
           <ShieldCheck size={18} />
-          <span>
-            <strong>Privacy First</strong>
-            <small>Verify eligibility without publishing personal identity data.</small>
-          </span>
+          <strong>Privacy First</strong>
         </div>
-        {isGuest ? (
-          connection ? (
-            <>
-              <div className="verification-badges" role="status">
-                <VerificationBadge
-                  detail="Human-backed"
-                  icon={<CheckCircle2 size={16} />}
-                  label="World verified"
-                />
-                <VerificationBadge
-                  detail={`${connection.onchainSignal.network} · capability active`}
-                  icon={<Network size={16} />}
-                  label="The Graph verified"
-                />
-              </div>
-              <button className="primary-button full-width" type="button" onClick={onContinue}>
-                Continue <ArrowRight size={17} />
-              </button>
-            </>
-          ) : (
-            <button
-              className="primary-button full-width"
-              disabled={busy}
-              type="button"
-              onClick={onConnect}
-            >
-              {busy ? (
-                <>
-                  <LoaderCircle className="spin" size={17} /> Checking World + The Graph
-                </>
-              ) : (
-                <>
-                  Connect World-backed Agent <ArrowRight size={17} />
-                </>
-              )}
-            </button>
-          )
-        ) : hostVerification ? (
-          <>
-            <div className="verification-badges" role="status">
-              <VerificationBadge
-                detail="Private Proof of Human"
-                icon={<CheckCircle2 size={16} />}
-                label="World ID verified"
-              />
-            </div>
-            <button className="primary-button full-width" type="button" onClick={onContinue}>
-              Continue <ArrowRight size={17} />
-            </button>
-          </>
-        ) : (
+        {!memberVerification ? (
           <button
             className="primary-button full-width"
-            disabled={busy}
+            disabled={busyWorldId}
             type="button"
-            onClick={onConnect}
+            onClick={onVerifyMember}
           >
-            {busy ? (
+            {busyWorldId ? (
               <>
                 <LoaderCircle className="spin" size={17} /> Preparing World ID
               </>
@@ -1059,14 +1063,68 @@ function IdentityScreen({
               </>
             )}
           </button>
+        ) : isGuest && !connection ? (
+          <>
+            <div className="verification-badges" role="status">
+              <VerificationBadge
+                detail="Private Proof of Human"
+                icon={<CheckCircle2 size={16} />}
+                label="World ID verified"
+              />
+            </div>
+            <button
+              className="primary-button full-width"
+              disabled={busyAgent}
+              type="button"
+              onClick={onConnectAgent}
+            >
+              {busyAgent ? (
+                <>
+                  <LoaderCircle className="spin" size={17} /> Checking World + The Graph
+                </>
+              ) : (
+                <>
+                  Connect World-backed Agent <ArrowRight size={17} />
+                </>
+              )}
+            </button>
+          </>
+        ) : isGuest && connection ? (
+          <>
+            <div className="verification-badges" role="status">
+              <VerificationBadge
+                detail="Private Proof of Human"
+                icon={<CheckCircle2 size={16} />}
+                label="World ID verified"
+              />
+              <VerificationBadge
+                detail="Human-backed Agent"
+                icon={<CheckCircle2 size={16} />}
+                label="World Agent verified"
+              />
+              <VerificationBadge
+                detail={`${connection.onchainSignal.network} · capability active`}
+                icon={<Network size={16} />}
+                label="The Graph verified"
+              />
+            </div>
+            <button className="primary-button full-width" type="button" onClick={onContinue}>
+              Continue <ArrowRight size={17} />
+            </button>
+          </>
+        ) : (
+          <button className="primary-button full-width" type="button" onClick={onContinue}>
+            Continue <ArrowRight size={17} />
+          </button>
         )}
       </div>
       {error && <InlineError error={error} />}
-      <BoundaryNote icon={<ShieldCheck size={18} />}>
-        {isGuest
-          ? 'This checks that the Agent is human-backed through World and has an active Nook capability through The Graph. The protected hold checks both again.'
-          : 'World ID proves a unique human completed Host onboarding. The proof is verified by the API and kept separate from public Listing and Hedera data.'}
-      </BoundaryNote>
+      {role === 'host' && (
+        <BoundaryNote icon={<ShieldCheck size={18} />}>
+          World ID proves a unique human completed Member onboarding. The proof is verified by the
+          API and kept separate from public Listing and Hedera data.
+        </BoundaryNote>
+      )}
     </FlowPage>
   );
 }
@@ -1091,9 +1149,22 @@ function FlowPage({
       </button>
       <p className="flow-eyebrow">{eyebrow}</p>
       <h1>{title}</h1>
-      <p className="flow-subtitle">{subtitle}</p>
+      {subtitle && <p className="flow-subtitle">{subtitle}</p>}
       {children}
     </section>
+  );
+}
+
+function InfoTooltip({ children, label }: { children: ReactNode; label: string }) {
+  return (
+    <span className="info-tooltip">
+      <button aria-describedby="guest-world-verification-help" aria-label={label} type="button">
+        <Info size={15} />
+      </button>
+      <span className="info-tooltip-content" id="guest-world-verification-help" role="tooltip">
+        {children}
+      </span>
+    </span>
   );
 }
 
@@ -1587,7 +1658,10 @@ function GuestSearchScreen({
       <div className="guest-profile-switch">
         <div>
           <span className="field-label">Demo Rental Reputation profile</span>
-          <p>This is seeded UI data until the HCS reputation projection is built.</p>
+          <p>
+            Seeded UI data until the HCS projection is built. Changing persona requires its own
+            Member verification.
+          </p>
         </div>
         <div className="profile-options">
           {(['experiencedGuest', 'newcomerGuest'] as const).map((key) => {
@@ -1661,21 +1735,27 @@ function GuestSearchScreen({
 }
 
 function ResultsScreen({
+  agentBusy,
   agentSearch,
   busy,
+  error,
   guestKey,
   listings,
   onBack,
   onOpen,
+  onSecure,
   search,
   selectedListing,
 }: {
+  agentBusy: boolean;
   agentSearch: GuestAgentSearchResult | null;
   busy: boolean;
+  error: NookApiError | null;
   guestKey: DemoGuestKey;
   listings: Listing[];
   onBack: () => void;
   onOpen: (listing: Listing) => Promise<void>;
+  onSecure: () => void;
   search: SearchInput;
   selectedListing: Listing | null;
 }) {
@@ -1721,6 +1801,28 @@ function ResultsScreen({
           )}
         </div>
       )}
+
+      {listings.length > 0 && (
+        <div className="agentic-action-card">
+          <div>
+            <span className="demo-tag">Agentic action</span>
+            <strong>Let your Agent secure the best match</strong>
+            <small>It can select, quote, and hold one home within this mandate.</small>
+          </div>
+          <button className="primary-button" disabled={agentBusy} type="button" onClick={onSecure}>
+            {agentBusy ? (
+              <>
+                <LoaderCircle className="spin" size={17} /> Securing dates…
+              </>
+            ) : (
+              <>
+                Secure best match <Sparkles size={17} />
+              </>
+            )}
+          </button>
+        </div>
+      )}
+      {error && <InlineError error={error} />}
 
       {listings.length === 0 ? (
         <EmptyState

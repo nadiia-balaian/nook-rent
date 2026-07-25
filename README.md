@@ -14,14 +14,18 @@ real Testnet settlement evidence, and two approval paths:
 
 ```text
 host describes a home
-  -> Host completes private World ID Proof of Human
+  -> Host completes private World ID Member verification
   -> host agent prepares a listing
   -> host confirms price, dates, and approval policy
+  -> Guest completes private World ID Member verification
+  -> Guest connects a human-backed agent
   -> guest agent searches available listings
-  -> World verifies that the agent is human-backed
+  -> Guest authorizes one secure-best-match mandate
+  -> agent selects the top valid listing and requests a hold
   -> The Graph verifies live agent and onchain signals
+  -> World rechecks that the agent is human-backed
   -> Nook.rent creates an expiring reservation hold
-  -> policy selects automatic approval or host review
+  -> stored host policy selects automatic approval or host review
   -> Hedera locks the deposit and records verifiable evidence
   -> booking is confirmed
   -> checkout and verified rental behavior update Rental Reputation
@@ -31,7 +35,7 @@ host describes a home
 
 - **Hedera:** real Testnet escrow, booking payment, scheduled operations, HCS
   evidence, and Mirror Node verification.
-- **World:** private Host Proof of Human during onboarding and human-backed Guest
+- **World:** private Member Proof of Human for both roles and human-backed Guest
   Agent authorization before scarce dates or funds can be controlled.
 - **The Graph:** live agent registration, wallet binding, capabilities, and
   explicitly selected onchain signals.
@@ -81,8 +85,11 @@ ready for one opt-in live smoke test:
 - persistent World nonce replay defense and a one-active-hold-per-human limit;
 - atomic human-backed authorization and Reservation Hold creation;
 - safe browser evidence that reveals no Agent or World identifier.
-- real World IDKit Host onboarding with a live World App QR flow, server-signed
-  RP context, server-side proof verification, and private nullifier storage;
+- real World IDKit Member onboarding for Host and Guest with a live World App QR
+  flow, server-signed RP context, server-side proof verification, and private
+  nullifier storage;
+- one-time Guest Agent Mandate that selects the top database-valid match,
+  creates its deterministic quote, and requests one protected hold;
 - direct Agent0 queries through The Graph on Base Sepolia;
 - active registration, signing-wallet/owner/operator binding, and named booking
   capability enforcement;
@@ -102,10 +109,10 @@ ready for one opt-in live smoke test:
   deposit, token, recipient, or an invalid Listing.
 
 The first five database migrations are applied to the isolated `nook` schema in
-hosted Supabase. The World ID Host verification migration is implemented
-locally and still needs an explicit hosted apply. The pseudonymous demo seed
-contains three profiles, two Lisbon Listings with the Nook.rent HTS token, and
-their availability windows.
+hosted Supabase. The World ID table and Member-generalization migrations are
+implemented locally and still need an explicit hosted apply. The pseudonymous
+demo seed contains three profiles, two Lisbon Listings with the Nook.rent HTS
+token, and their availability windows.
 
 Monorepo layout:
 
@@ -141,7 +148,7 @@ docs/
    resource evidence.
 7. Follow [docs/WORLD_AGENTKIT.md](./docs/WORLD_AGENTKIT.md) for the protected
    Guest Agent flow.
-8. Follow [docs/WORLD_ID.md](./docs/WORLD_ID.md) for private Host onboarding.
+8. Follow [docs/WORLD_ID.md](./docs/WORLD_ID.md) for private Member onboarding.
 9. Follow [docs/THE_GRAPH_AGENT0.md](./docs/THE_GRAPH_AGENT0.md) to register and
    verify the same Agent through The Graph.
 

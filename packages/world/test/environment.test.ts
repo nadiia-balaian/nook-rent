@@ -25,12 +25,14 @@ describe('World environment', () => {
         WORLD_ID_APP_ID: 'app_nook_test',
         WORLD_ID_RP_ID: 'rp_nook_test',
         WORLD_ID_SIGNING_KEY: `0x${'1'.repeat(64)}`,
+        WORLD_ID_ACTION: 'nook-member-onboarding',
         WORLD_ID_ENVIRONMENT: 'staging',
       }),
     ).toEqual({
       appId: 'app_nook_test',
       rpId: 'rp_nook_test',
       signingKey: `0x${'1'.repeat(64)}`,
+      action: 'nook-member-onboarding',
       environment: 'staging',
     });
   });

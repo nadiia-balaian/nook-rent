@@ -61,9 +61,11 @@ supabase/
 
 ### `apps/web`
 
-Renders a guided Host and Guest journey across onboarding, Listing creation,
-Agent review, search, Listing detail, Booking Quote, Reservation Hold, Host
-review, deposit, and confirmation states. It communicates only with the API.
+Renders a guided Host and Guest journey across Member verification, Agent
+connection, Listing creation, Agent review, search, Listing detail, Booking
+Quote, Reservation Hold, Host review, deposit, and confirmation states. It
+communicates with IDKit for the World App proof flow and otherwise only with the
+API.
 The UI includes clearly labeled seeded Rental Reputation profiles while the
 real HCS projection is deferred; it never presents that demo data as live
 sponsor evidence. It does not hold provider credentials or make financial or
@@ -73,9 +75,10 @@ authorization decisions.
 
 Authenticates requests, validates HTTP input, calls application services, and
 returns public read models. It is a composition root for provider adapters. For
-the guided demo it also exposes a narrow bridge to the server-side Guest Agent,
-so the browser can request a protected action without receiving Agent signing
-material.
+the guided demo it also exposes a narrow bridge to the server-side Guest Agent.
+The browser may approve one bounded Agent Mandate to select the top
+database-valid match, accept its deterministic quote, and request a protected
+hold without receiving Agent signing material.
 
 ### `apps/worker`
 
@@ -126,7 +129,7 @@ Owns idempotency and recovery for an external financial or evidence write.
 | Profiles, Listings, availability, and Booking metadata | Supabase                                          |
 | Approval Policy and result                             | Stored Nook.rent policy evaluation                |
 | Reservation Hold conflicts and expiry                  | Supabase transaction                              |
-| Host Proof of Human                                    | World ID verification result                      |
+| Member Proof of Human                                  | World ID verification result                      |
 | Human-backed Guest Agent authorization                 | World AgentKit verification result                |
 | Agent registration and named Onchain Signals           | Live Graph provider response                      |
 | Financial transaction outcome                          | Hedera consensus record via Mirror Node           |
@@ -209,6 +212,16 @@ the 3–90-night range and atomic amount. The database applies hard filters befo
 the AI may rank and explain only those valid candidates. Unknown or duplicated
 Listing IDs are rejected.
 
+### Guest Agent Mandate
+
+The Guest explicitly starts one secure-match action using the current natural
+language request. The API interprets it into validated constraints, reruns hard
+database filtering, and lets the Agent select only the first ranked valid
+candidate. Stored Listing data and the interpreted date range create the
+deterministic Booking Quote. The server-side Guest Agent then requests one
+idempotent protected hold. Stored Host policy—not the Agent—returns automatic
+approval or Host review.
+
 ### Commands
 
 The Agent selects from a closed intent vocabulary. Application services load all
@@ -218,15 +231,16 @@ financial authority.
 
 ## World architecture
 
-- The Host onboarding screen opens the real IDKit World App QR flow.
+- Both Host and Guest onboarding open the real IDKit World App QR flow.
 - The API creates the signed RP context and keeps its signing key server-side.
 - World verifies the profile-bound Proof of Human on the API.
 - Supabase stores the action-specific nullifier privately to prevent reuse.
-- The Guest onboarding screen performs live AgentBook and Agent0 capability
-  checks, then shows only compact verified badges.
+- After direct Member verification, Guest onboarding performs live AgentBook
+  and Agent0 capability checks, then shows only compact verified badges.
 - The browser asks the server-side Guest Agent to perform the protected action.
 - The Agent signs the AgentKit challenge with its registered wallet.
-- World AgentKit resolves whether that Agent is human-backed.
+- The protected hold first rechecks the Guest's direct Member verification.
+- World AgentKit then resolves whether that Agent is human-backed.
 - Anonymous human identifiers and nonces are stored server-side only.
 - The browser receives no Agent address, wallet key, signed header, World
   identifier, or nonce.
@@ -289,8 +303,10 @@ model, not a production custody design.
 The schema and repositories are implemented and tested against local
 PostgreSQL. The first five migrations, including the World AgentKit
 authorization and idempotent-retry changes, are applied to the isolated hosted
-`nook` schema. The sixth migration for private Host World ID verification is
-implemented locally and pending an explicit hosted apply.
+`nook` schema. The sixth migration introduced private Host World ID
+verification. The seventh locally implemented migration generalizes it to
+private Member verification for both Host and Guest; the World ID migrations
+remain pending an explicit hosted apply.
 
 ## Deployment shape
 

@@ -39,7 +39,7 @@ The deposit Operation suite additionally proves:
 Other provider adapters use controlled fakes that match captured, redacted
 schemas:
 
-- World ID Host proof validation and provider failures;
+- World ID Member proof validation and provider failures;
 - World verification outcomes and nonce behavior;
 - Graph Agent0 query mapping and provider failures;
 - Hedera submission and Mirror Node reconciliation;
@@ -58,7 +58,7 @@ failure.
 Explicitly authorized checks for:
 
 - applying migrations to hosted Supabase;
-- World ID Host verification through World App;
+- World ID Member verification for Host and Guest through World App;
 - World registration and protected requests;
 - live Graph gateway query;
 - Hedera Testnet HTS transfer;
@@ -72,8 +72,11 @@ Hosted tests must be opt-in and use isolated demo resources.
 Exercise the deployed web and API:
 
 - Host creates and publishes a Listing;
-- Host must complete World ID Proof of Human before Listing creation;
+- Host must complete World ID Member verification before Listing creation;
+- Guest must complete World ID Member verification before Agent connection;
 - Guest searches and accepts a quote;
+- Guest may authorize one Agent Mandate to select, quote, and hold the top valid
+  match;
 - unverified Agent is denied;
 - verified Agent creates a hold;
 - automatic approval succeeds for an experienced Guest;
@@ -89,9 +92,10 @@ automatic approval, Host review, Host decision, idempotent retry, and
 conflicting-date rejection.
 
 The Phase 4 browser-component suite exercises the guided onboarding and role
-selection, required World ID Host verification, required World-backed Guest
-Agent and Agent0 capability verification, compact verification badges, Guest
-search and quote presentation, automatic approval,
+selection, required World ID Member verification for both roles, required
+World-backed Guest Agent and Agent0 capability verification, compact
+verification badges, Guest search, secure-best-match Agent Mandate, quote
+presentation, automatic approval,
 Newcomer Host review, the explicit Host decision handoff, Host Agent
 review-before-publish, deposit confirmation, and HTS/HCS evidence links. Manual
 visual QA additionally covers the desktop and 390px mobile layouts using the
@@ -121,11 +125,12 @@ tests prove application behavior. The opt-in live exit run additionally proved
 Agent registration, AgentBook lookup on World Chain, protected Hold creation,
 fresh-nonce idempotent retry, and rejection of a second concurrent Hold.
 
-The Host World ID suite verifies profile-bound proofs, safe public
-configuration, signed RP contexts, provider rejection, and browser gating with
-controlled dependencies. It does not count as live World evidence until the
-Developer Portal configuration is installed, the hosted migration is applied,
-and a World App proof succeeds end to end.
+The Member World ID suite verifies profile-bound proofs, safe public
+configuration, signed RP contexts, provider rejection, direct Host and Guest
+gating, and protected-hold rechecks with controlled dependencies. It does not
+count as live World evidence until the Member action is installed in the
+Developer Portal, the hosted migrations are applied, and a World App proof
+succeeds end to end.
 
 The Phase 7 adapter suite verifies the exact Agent0 response mapping, wallet
 binding, named capability extraction, cache behavior, absent registrations,
@@ -152,7 +157,7 @@ tracer. These controlled tests do not count as a paid live OpenAI check.
 - overlapping hold;
 - duplicate idempotency key with different payload;
 - World proof replay;
-- Host World ID reused for another profile;
+- Member World ID reused for another profile;
 - Agent wallet does not match the Graph registration;
 - Graph provider unavailable;
 - AI invents an unsupported amenity;

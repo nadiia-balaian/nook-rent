@@ -6,7 +6,9 @@ World does not create Rental Reputation and is not generic sign-in. It protects
 the scarce action in the Guest flow:
 
 ```text
-public Listing search
+direct Guest World ID Member verification
+  -> public Listing search
+  -> Guest authorizes one bounded secure-best-match mandate
   -> public deterministic quote
   -> 402 AgentKit challenge
   -> Guest Agent signs the challenge
@@ -29,11 +31,12 @@ contains only:
 }
 ```
 
-The guided Guest flow first calls
-`POST /v1/agents/guest/world-connection`. This performs a live AgentBook lookup
-and a live The Graph Agent0 capability check. It returns only safe public
-verification states and network labels. When the Guest later requests dates,
-the browser calls
+The guided Guest flow first completes direct World ID Member verification, then
+calls `POST /v1/agents/guest/world-connection`. This performs a live AgentBook
+lookup and a live The Graph Agent0 capability check. It returns only safe
+public verification states and network labels. The Guest may later call
+`POST /v1/agents/guest/secure-match` to let the Agent select the top valid match,
+create its deterministic quote, and request one hold. The manual path calls
 `POST /v1/agents/guest/reservation-holds`. The server-side Guest Agent then calls
 the protected Reservation Hold resource through the official AgentKit client,
 handles the `402` challenge, signs it with the server-only Agent wallet, and
@@ -42,8 +45,10 @@ retries. The browser never signs or receives Agent wallet material.
 ## Implemented
 
 - official `@worldcoin/agentkit` server and Guest Agent client;
+- direct Guest Member verification before Agent connection or protected hold;
 - explicit UI connection step backed by live AgentBook and Agent0 checks;
 - server-side Guest Agent bridge for the browser demo flow;
+- bounded, idempotent secure-best-match Agent Mandate;
 - five-minute World Chain challenge bound to the Reservation Hold URL;
 - signed-message validation and signature verification;
 - AgentBook lookup on World Chain;

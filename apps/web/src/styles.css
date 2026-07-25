@@ -24,6 +24,12 @@
   box-sizing: border-box;
 }
 
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
 html {
   scroll-behavior: smooth;
 }
@@ -97,19 +103,22 @@ p {
 }
 
 .nook-app {
-  min-height: 100vh;
+  display: flex;
+  min-height: 100svh;
+  flex-direction: column;
 }
 
 .screen-stage {
+  display: flex;
+  align-items: center;
+  flex: 1;
   width: min(1180px, calc(100% - 48px));
-  min-height: calc(100vh - 154px);
   margin: 0 auto;
-  padding: 40px 0 88px;
+  padding: 40px 0;
 }
 
 .screen-stage.compact {
   width: 100%;
-  min-height: auto;
   padding: 0;
 }
 
@@ -118,6 +127,7 @@ p {
 }
 
 .screen-fade {
+  width: 100%;
   animation: calm-fade 400ms ease-out both;
 }
 
@@ -297,7 +307,7 @@ p {
   display: flex;
   justify-content: space-between;
   width: min(1180px, calc(100% - 48px));
-  margin: 0 auto;
+  margin: auto auto 0;
   padding: 22px 0 30px;
   color: var(--muted);
   border-top: 1px solid var(--line);
@@ -657,6 +667,65 @@ p {
   background: rgb(231 242 233 / 72%);
 }
 
+.identity-status-line {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+}
+
+.info-tooltip {
+  position: relative;
+  display: inline-flex;
+}
+
+.info-tooltip > button {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  color: var(--muted);
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  cursor: help;
+  place-items: center;
+}
+
+.info-tooltip > button:hover,
+.info-tooltip > button:focus-visible {
+  color: var(--pine);
+  background: var(--linen);
+}
+
+.info-tooltip-content {
+  position: absolute;
+  z-index: 5;
+  bottom: calc(100% + 9px);
+  left: 50%;
+  width: min(280px, calc(100vw - 64px));
+  padding: 10px 12px;
+  color: var(--surface);
+  border-radius: 10px;
+  background: var(--pine);
+  box-shadow: var(--shadow-sm);
+  font-size: 0.72rem;
+  line-height: 1.45;
+  opacity: 0;
+  pointer-events: none;
+  text-align: left;
+  transform: translate(-50%, 4px);
+  transition:
+    opacity 140ms ease,
+    transform 140ms ease;
+}
+
+.info-tooltip:hover .info-tooltip-content,
+.info-tooltip:focus-within .info-tooltip-content {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
 .identity-card h2 {
   margin: 16px 0 9px;
 }
@@ -688,21 +757,10 @@ p {
   color: var(--clay);
 }
 
-.privacy-first span {
-  display: flex;
-  flex-direction: column;
-}
-
 .privacy-first strong {
   font-size: 0.76rem;
   letter-spacing: 0.05em;
   text-transform: uppercase;
-}
-
-.privacy-first small {
-  margin-top: 2px;
-  color: var(--muted);
-  font-size: 0.7rem;
 }
 
 .verification-badges {
@@ -1410,7 +1468,7 @@ p {
 
 .results-heading h1 {
   max-width: 760px;
-  font-size: clamp(2.7rem, 5vw, 4.8rem);
+  font-size: clamp(2rem, 3.2vw, 3.25rem);
 }
 
 .results-heading > div:first-child > p:last-child {
@@ -1455,6 +1513,41 @@ p {
   background: rgb(240 221 213 / 44%);
   font-size: 0.68rem;
   font-weight: 600;
+}
+
+.agentic-action-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 20px;
+  padding: 17px 18px;
+  border: 1px solid rgb(49 92 85 / 18%);
+  border-radius: 14px;
+  background: rgb(255 252 247 / 82%);
+  box-shadow: var(--shadow-sm);
+}
+
+.agentic-action-card > div {
+  display: flex;
+  align-items: flex-start;
+  flex-direction: column;
+}
+
+.agentic-action-card strong {
+  margin: 8px 0 3px;
+  color: var(--pine);
+  font-family: 'Fraunces', ui-serif, Georgia, serif;
+  font-size: 1.08rem;
+}
+
+.agentic-action-card small {
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.agentic-action-card .primary-button {
+  flex: 0 0 auto;
 }
 
 .marketplace-grid {
@@ -2439,6 +2532,15 @@ p {
   .agent-run-strip {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .agentic-action-card {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .agentic-action-card .primary-button {
+    width: 100%;
   }
 
   .market-image {

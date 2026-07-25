@@ -34,17 +34,26 @@ A software actor operating within a narrowly defined capability set on behalf
 of a Member. Host and Guest Agents use separate permissions and never determine
 financial parameters from natural-language text.
 
+### Agent Mandate
+
+A one-time, Member-approved instruction that gives an Agent bounded authority
+to act within validated constraints. A Guest Agent Mandate may include city,
+dates, occupancy, budget, and required amenities. It may select from valid
+Listings, accept the deterministic Booking Quote, and request one Reservation
+Hold. It cannot alter price, dates, Host policy, payment authority, or approval.
+
 ### Human-backed authorization
 
-Proof that an Agent acts for a real, unique person. It controls access to
-protected actions but does not measure rental behavior.
+Proof that a Member is a real, unique person and that an Agent acts for that
+person. It controls access to protected actions but does not measure rental
+behavior.
 
-### World ID Host verification
+### World ID Member verification
 
-An action-specific Proof of Human completed by a Host during onboarding. It
-confirms uniqueness without revealing the Host's name, wallet, or exact home
-address. It is not Rental Reputation and is separate from Guest Agent
-authorization.
+An action-specific Proof of Human completed by every Member during onboarding,
+whether they continue as Host, Guest, or both. It confirms uniqueness without
+revealing the Member's name, wallet, or exact home address. It is not Rental
+Reputation and is separate from Guest Agent authorization.
 
 ### Listing
 
