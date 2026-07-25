@@ -1,2 +1,4 @@
-// Supabase repositories will implement core-owned persistence ports.
-export {};
+export * from './client.js';
+export * from './mappers.js';
+export * from './migrations.js';
+export * from './repositories.js';

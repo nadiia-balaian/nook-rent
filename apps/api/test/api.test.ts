@@ -23,5 +23,41 @@ describe('Nook API', () => {
       service: 'nook-api',
       status: 'ok',
     });
+    expect(response.headers['x-request-id']).toBeTypeOf('string');
+  });
+
+  it('reports that readiness is unavailable without a database adapter', async () => {
+    const application = createApi();
+    applications.push(application);
+
+    const response = await application.inject({
+      method: 'GET',
+      url: '/ready',
+    });
+
+    expect(response.statusCode).toBe(503);
+    expect(response.json()).toEqual({
+      service: 'nook-api',
+      status: 'not_ready',
+    });
+  });
+
+  it('uses a stable error envelope for unknown routes', async () => {
+    const application = createApi();
+    applications.push(application);
+
+    const response = await application.inject({
+      method: 'GET',
+      url: '/does-not-exist',
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json()).toMatchObject({
+      error: {
+        code: 'route_not_found',
+        message: 'The requested API route does not exist',
+      },
+    });
+    expect(response.json().error.requestId).toBeTypeOf('string');
   });
 });

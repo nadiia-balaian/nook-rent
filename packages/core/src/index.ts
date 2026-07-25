@@ -3,6 +3,7 @@ export * from './booking-quote.js';
 export * from './entities.js';
 export * from './errors.js';
 export * from './local-date.js';
+export * from './marketplace-service.js';
 export * from './ports.js';
 export * from './state-machine.js';
 export * from './token-amount.js';

@@ -1,0 +1,375 @@
+import { StayRange, TokenAmount } from '@nook-rent/core';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+
+import { createPostgresClient, type PostgresClient } from '../src/client.js';
+import { applyMigrations } from '../src/migrations.js';
+import {
+  PostgresBookingRepository,
+  PostgresListingRepository,
+  PostgresReservationHoldRepository,
+} from '../src/repositories.js';
+
+const databaseUrl = process.env.TEST_DATABASE_URL;
+const describeWithDatabase = databaseUrl ? describe : describe.skip;
+
+const HOST_ID = '10000000-0000-4000-8000-000000000001';
+const GUEST_ONE_ID = '20000000-0000-4000-8000-000000000001';
+const GUEST_TWO_ID = '20000000-0000-4000-8000-000000000002';
+const LISTING_ID = '30000000-0000-4000-8000-000000000001';
+const QUOTE_ONE_ID = '40000000-0000-4000-8000-000000000001';
+const QUOTE_TWO_ID = '40000000-0000-4000-8000-000000000002';
+const NOW = '2026-07-25T10:00:00.000Z';
+
+describeWithDatabase('Postgres Reservation Hold repository', () => {
+  let sql: PostgresClient;
+  let bookingRepository: PostgresBookingRepository;
+  let listingRepository: PostgresListingRepository;
+  let repository: PostgresReservationHoldRepository;
+
+  beforeAll(async () => {
+    sql = createPostgresClient(databaseUrl ?? '', { maxConnections: 5 });
+    await applyMigrations(sql);
+    bookingRepository = new PostgresBookingRepository(sql);
+    listingRepository = new PostgresListingRepository(sql);
+    repository = new PostgresReservationHoldRepository(sql);
+  });
+
+  beforeEach(async () => {
+    await sql`
+      truncate table
+        nook.reputation_projections,
+        nook.rental_events,
+        nook.payments,
+        nook.escrows,
+        nook.bookings,
+        nook.booking_requests,
+        nook.reservation_holds,
+        nook.booking_quotes,
+        nook.availability_windows,
+        nook.listing_approval_policies,
+        nook.listings,
+        nook.agent_bindings,
+        nook.profiles
+      cascade
+    `;
+
+    await seedMarketplace(sql);
+  });
+
+  afterAll(async () => {
+    await sql.end();
+  });
+
+  it('allows only one of two concurrent overlapping holds', async () => {
+    const stayRange = StayRange.fromStrings({
+      checkIn: '2026-08-10',
+      checkOut: '2026-08-15',
+    });
+
+    const results = await Promise.all([
+      repository.createActive({
+        requestId: 'request-concurrent-one',
+        listingId: LISTING_ID,
+        guestProfileId: GUEST_ONE_ID,
+        quoteId: QUOTE_ONE_ID,
+        stayRange,
+        expiresAt: '2026-07-25T10:10:00.000Z',
+        now: NOW,
+      }),
+      repository.createActive({
+        requestId: 'request-concurrent-two',
+        listingId: LISTING_ID,
+        guestProfileId: GUEST_TWO_ID,
+        quoteId: QUOTE_TWO_ID,
+        stayRange,
+        expiresAt: '2026-07-25T10:10:00.000Z',
+        now: NOW,
+      }),
+    ]);
+
+    expect(results.map((result) => result.status).sort()).toEqual(['conflict', 'created']);
+  });
+
+  it('searches only Listings whose stored availability and hard filters match', async () => {
+    const matches = await listingRepository.search({
+      city: 'lisbon',
+      stayRange: StayRange.fromStrings({
+        checkIn: '2026-08-10',
+        checkOut: '2026-08-15',
+      }),
+      maximumNightlyRate: TokenAmount.fromAtomicUnits('10000'),
+      guests: 2,
+      requiredAmenities: ['wifi'],
+    });
+    const misses = await listingRepository.search({
+      city: 'Lisbon',
+      stayRange: StayRange.fromStrings({
+        checkIn: '2026-08-10',
+        checkOut: '2026-08-15',
+      }),
+      guests: 2,
+      requiredAmenities: ['lift'],
+    });
+
+    expect(matches).toHaveLength(1);
+    expect(matches[0]?.id).toBe(LISTING_ID);
+    expect(matches[0]?.nightlyRate.toString()).toBe('10000');
+    expect(misses).toEqual([]);
+  });
+
+  it('returns the original hold when the same request is retried', async () => {
+    const input = {
+      requestId: 'request-idempotent',
+      listingId: LISTING_ID,
+      guestProfileId: GUEST_ONE_ID,
+      quoteId: QUOTE_ONE_ID,
+      stayRange: StayRange.fromStrings({
+        checkIn: '2026-08-10',
+        checkOut: '2026-08-15',
+      }),
+      expiresAt: '2026-07-25T10:10:00.000Z',
+      now: NOW,
+    };
+
+    const first = await repository.createActive(input);
+    const retry = await repository.createActive(input);
+
+    expect(first.status).toBe('created');
+    expect(retry.status).toBe('idempotent');
+
+    if (first.status === 'created' && retry.status === 'idempotent') {
+      expect(retry.hold.id).toBe(first.hold.id);
+    }
+  });
+
+  it('rejects reuse of one request ID for different Booking terms', async () => {
+    const stayRange = StayRange.fromStrings({
+      checkIn: '2026-08-10',
+      checkOut: '2026-08-15',
+    });
+    const requestId = 'request-reused-with-different-terms';
+
+    await repository.createActive({
+      requestId,
+      listingId: LISTING_ID,
+      guestProfileId: GUEST_ONE_ID,
+      quoteId: QUOTE_ONE_ID,
+      stayRange,
+      expiresAt: '2026-07-25T10:10:00.000Z',
+      now: NOW,
+    });
+
+    await expect(
+      repository.createActive({
+        requestId,
+        listingId: LISTING_ID,
+        guestProfileId: GUEST_TWO_ID,
+        quoteId: QUOTE_TWO_ID,
+        stayRange,
+        expiresAt: '2026-07-25T10:10:00.000Z',
+        now: NOW,
+      }),
+    ).rejects.toThrow('idempotency_key_reused');
+  });
+
+  it('expires a hold and makes its dates available again', async () => {
+    const stayRange = StayRange.fromStrings({
+      checkIn: '2026-08-10',
+      checkOut: '2026-08-15',
+    });
+    const first = await repository.createActive({
+      requestId: 'request-expiring',
+      listingId: LISTING_ID,
+      guestProfileId: GUEST_ONE_ID,
+      quoteId: QUOTE_ONE_ID,
+      stayRange,
+      expiresAt: '2026-07-25T10:10:00.000Z',
+      now: NOW,
+    });
+
+    expect(first.status).toBe('created');
+
+    const expired = await repository.expireActive({
+      now: '2026-07-25T10:11:00.000Z',
+      limit: 100,
+    });
+    expect(expired).toHaveLength(1);
+    expect(expired[0]?.status).toBe('expired');
+
+    const replacement = await repository.createActive({
+      requestId: 'request-after-expiry',
+      listingId: LISTING_ID,
+      guestProfileId: GUEST_TWO_ID,
+      quoteId: QUOTE_TWO_ID,
+      stayRange,
+      expiresAt: '2026-07-25T10:20:00.000Z',
+      now: '2026-07-25T10:11:00.000Z',
+    });
+    expect(replacement.status).toBe('created');
+  });
+
+  it('persists and reads a Booking without losing exact token amounts', async () => {
+    const hold = await repository.createActive({
+      requestId: 'request-for-booking',
+      listingId: LISTING_ID,
+      guestProfileId: GUEST_ONE_ID,
+      quoteId: QUOTE_ONE_ID,
+      stayRange: StayRange.fromStrings({
+        checkIn: '2026-08-10',
+        checkOut: '2026-08-15',
+      }),
+      expiresAt: '2026-07-25T10:10:00.000Z',
+      now: NOW,
+    });
+
+    expect(hold.status).toBe('created');
+
+    if (hold.status !== 'created') {
+      return;
+    }
+
+    const bookingId = '50000000-0000-4000-8000-000000000001';
+    await bookingRepository.save({
+      id: bookingId,
+      listingId: LISTING_ID,
+      hostProfileId: HOST_ID,
+      guestProfileId: GUEST_ONE_ID,
+      quoteId: QUOTE_ONE_ID,
+      holdId: hold.hold.id,
+      stayRange: StayRange.fromStrings({
+        checkIn: '2026-08-10',
+        checkOut: '2026-08-15',
+      }),
+      settlementTokenId: '0.0.12345',
+      staySubtotal: TokenAmount.fromAtomicUnits('50000'),
+      depositAmount: TokenAmount.fromAtomicUnits('50000'),
+      status: 'awaiting_deposit',
+      createdAt: NOW,
+      updatedAt: NOW,
+    });
+
+    const saved = await bookingRepository.getById(bookingId);
+    expect(saved?.status).toBe('awaiting_deposit');
+    expect(saved?.staySubtotal.toString()).toBe('50000');
+    expect(saved?.depositAmount.toString()).toBe('50000');
+  });
+
+  it('keeps every marketplace table behind default-deny row-level security', async () => {
+    const tables = await sql<{ relname: string; relrowsecurity: boolean }[]>`
+      select class.relname, class.relrowsecurity
+      from pg_class as class
+      inner join pg_namespace as namespace on namespace.oid = class.relnamespace
+      where namespace.nspname = 'nook'
+        and class.relkind = 'r'
+      order by class.relname
+    `;
+    const policies = await sql<{ policy_count: number }[]>`
+      select count(*)::integer as policy_count
+      from pg_policies
+      where schemaname = 'nook'
+    `;
+
+    expect(tables).toHaveLength(15);
+    expect(tables.every((table) => table.relrowsecurity)).toBe(true);
+    expect(policies[0]?.policy_count).toBe(0);
+  });
+});
+
+async function seedMarketplace(sql: PostgresClient): Promise<void> {
+  await sql`
+    insert into nook.profiles (id, role, public_ref)
+    values
+      (${HOST_ID}, 'host', 'host-lisbon'),
+      (${GUEST_ONE_ID}, 'guest', 'guest-one'),
+      (${GUEST_TWO_ID}, 'guest', 'guest-two')
+  `;
+  await sql`
+    insert into nook.listings (
+      id,
+      host_profile_id,
+      title,
+      description,
+      city,
+      neighborhood,
+      approximate_location_ref,
+      amenities,
+      house_rules,
+      settlement_token_id,
+      nightly_rate_atomic,
+      base_deposit_atomic,
+      max_guests,
+      status
+    )
+    values (
+      ${LISTING_ID},
+      ${HOST_ID},
+      'Alfama work-friendly nook',
+      'A temporary Lisbon stay.',
+      'Lisbon',
+      'Alfama',
+      'lisbon-alfama-demo-area',
+      array['wifi', 'desk'],
+      array['No smoking'],
+      '0.0.12345',
+      10000,
+      50000,
+      2,
+      'published'
+    )
+  `;
+  await sql`
+    insert into nook.availability_windows (listing_id, check_in, check_out)
+    values (${LISTING_ID}, '2026-08-01', '2026-09-01')
+  `;
+  await sql`
+    insert into nook.booking_quotes (
+      id,
+      listing_id,
+      guest_profile_id,
+      check_in,
+      check_out,
+      settlement_token_id,
+      nightly_rate_atomic,
+      stay_subtotal_atomic,
+      base_deposit_atomic,
+      quoted_deposit_atomic,
+      total_due_atomic,
+      reputation_tier,
+      expires_at,
+      created_at
+    )
+    values
+      (
+        ${QUOTE_ONE_ID},
+        ${LISTING_ID},
+        ${GUEST_ONE_ID},
+        '2026-08-10',
+        '2026-08-15',
+        '0.0.12345',
+        10000,
+        50000,
+        50000,
+        50000,
+        100000,
+        'silver',
+        '2026-07-25T10:30:00.000Z',
+        ${NOW}
+      ),
+      (
+        ${QUOTE_TWO_ID},
+        ${LISTING_ID},
+        ${GUEST_TWO_ID},
+        '2026-08-10',
+        '2026-08-15',
+        '0.0.12345',
+        10000,
+        50000,
+        50000,
+        75000,
+        125000,
+        'newcomer',
+        '2026-07-25T10:30:00.000Z',
+        ${NOW}
+      )
+  `;
+}

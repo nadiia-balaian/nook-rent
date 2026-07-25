@@ -1,6 +1,6 @@
 # Nook.rent implementation plan
 
-Status: ready to start
+Status: active; Phases 0–3 implemented
 Strategy: build one end-to-end tracer bullet, then deepen it
 
 ## Completion rule
@@ -73,6 +73,8 @@ passes without external services.
 
 Estimate: 4–6 focused hours
 
+Status: implemented on 2026-07-25; hosted `nook` schema migrated
+
 Create migrations for:
 
 - profiles;
@@ -105,6 +107,8 @@ Exit check:
 ## Phase 3: marketplace API tracer
 
 Estimate: 3–5 focused hours
+
+Status: implemented on 2026-07-25; hosted demo seed not applied
 
 Implement:
 
@@ -328,12 +332,12 @@ Provider access or registration delays may add time.
 
 ## Next coding task
 
-Continue with Phase 2 and deliver one focused commit:
+Continue with Phase 4 after committing the persistence and API work:
 
 ```text
-feat: add marketplace persistence and reservation holds
+feat: add marketplace UI tracer
 ```
 
-That commit should add the initial Supabase migrations, repositories, atomic
-overlap protection, hold expiry, and deterministic repository tests. Hosted
-migration execution remains a separately authorized action.
+That commit should make the automatic-approval and Host-review paths usable
+without API documentation, including explicit loading, unavailable, conflict,
+expired, and failure states.

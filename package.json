@@ -18,6 +18,8 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "eslint .",
+    "supabase:migrate": "pnpm --filter @nook-rent/supabase supabase:migrate",
+    "supabase:seed-demo": "pnpm --filter @nook-rent/supabase supabase:seed-demo",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "pnpm -r --if-present typecheck"

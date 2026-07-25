@@ -22,7 +22,9 @@ export interface Listing {
   approximateLocationRef: string;
   amenities: string[];
   houseRules: string[];
+  settlementTokenId: string;
   nightlyRate: TokenAmount;
+  baseDeposit: TokenAmount;
   maxGuests: number;
   status: ListingStatus;
   createdAt: string;
@@ -43,6 +45,7 @@ export interface BookingQuote {
   listingId: string;
   guestProfileId: string;
   stayRange: StayRange;
+  settlementTokenId: string;
   nightlyRate: TokenAmount;
   staySubtotal: TokenAmount;
   baseDeposit: TokenAmount;
@@ -63,6 +66,24 @@ export interface ReservationHold {
   stayRange: StayRange;
   status: ReservationHoldStatus;
   expiresAt: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type BookingRequestStatus = 'pending' | 'approved' | 'rejected' | 'expired' | 'cancelled';
+
+export type BookingRequestApprovalResult =
+  'host_review' | 'auto_approved' | 'approved' | 'rejected';
+
+export interface BookingRequest {
+  id: string;
+  holdId: string;
+  listingId: string;
+  guestProfileId: string;
+  approvalResult: BookingRequestApprovalResult;
+  approvalReason?: string;
+  policyVersion: number;
+  status: BookingRequestStatus;
   createdAt: string;
   updatedAt: string;
 }
@@ -88,6 +109,7 @@ export interface Booking {
   quoteId: string;
   holdId: string;
   stayRange: StayRange;
+  settlementTokenId: string;
   staySubtotal: TokenAmount;
   depositAmount: TokenAmount;
   status: BookingStatus;

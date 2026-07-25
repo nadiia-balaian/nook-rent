@@ -4,14 +4,17 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx watch src/main.ts",
+    "dev": "node --env-file-if-exists=../../.env --import tsx --watch src/main.ts",
     "start": "tsx src/main.ts",
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
+    "@fastify/cors": "11.3.0",
     "@nook-rent/config": "workspace:*",
     "@nook-rent/core": "workspace:*",
-    "fastify": "5.10.0"
+    "@nook-rent/supabase": "workspace:*",
+    "fastify": "5.10.0",
+    "zod": "4.4.3"
   },
   "devDependencies": {
     "tsx": "4.23.1"

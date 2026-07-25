@@ -7,9 +7,15 @@
     ".": "./src/index.ts"
   },
   "scripts": {
+    "supabase:migrate": "node --env-file-if-exists=../../.env --import tsx src/migrate-cli.ts",
+    "supabase:seed-demo": "node --env-file-if-exists=../../.env --import tsx src/seed-demo-cli.ts",
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
-    "@nook-rent/core": "workspace:*"
+    "@nook-rent/core": "workspace:*",
+    "postgres": "3.4.9"
+  },
+  "devDependencies": {
+    "tsx": "4.23.1"
   }
 }

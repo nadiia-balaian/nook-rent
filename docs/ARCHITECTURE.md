@@ -1,6 +1,6 @@
 # Nook.rent architecture
 
-Status: Phase 1 foundation implemented; provider flows remain planned
+Status: Phase 3 marketplace API implemented; sponsor flows remain planned
 
 ## Principles
 
@@ -219,11 +219,18 @@ financial and authorization parameters from stored state.
 ## Supabase architecture
 
 - All schema changes are versioned migrations.
+- All Nook.rent-owned objects live in the isolated `nook` database schema.
 - API and worker use server-side credentials.
 - Browser access is denied by default until explicit row-level policies exist.
-- Hold creation uses a database transaction or function that prevents date
-  overlap atomically.
+- Hold creation calls a security-definer database function that locks one
+  Listing before checking and inserting dates.
+- A request ID is unique and retries return the original Reservation Hold.
+- Expiry is claimed in bounded batches with locked rows.
 - Nook.rent tables must not depend on unrelated application tables.
+
+The schema and repositories are implemented and tested against local
+PostgreSQL. Both current migrations are applied to the isolated hosted `nook`
+schema.
 
 ## Deployment shape
 

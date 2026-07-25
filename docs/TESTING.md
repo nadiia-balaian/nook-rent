@@ -17,12 +17,21 @@ Pure, deterministic tests for:
 
 Unit tests have no network access.
 
-### Repository contract tests
+### Repository and adapter tests
 
-Run provider adapters against controlled fakes that match captured, redacted
+Supabase repositories run against an isolated PostgreSQL database. The
+Reservation Hold suite applies the real migration and proves:
+
+- concurrent overlap prevention;
+- idempotent retries;
+- expiry and date release;
+- Listing hard filters;
+- exact Booking amount mapping;
+- default-deny row-level security.
+
+Other provider adapters use controlled fakes that match captured, redacted
 schemas:
 
-- Supabase row mapping and database errors;
 - World verification outcomes and nonce behavior;
 - Graph Agent0 query mapping and provider failures;
 - Hedera submission and Mirror Node reconciliation;
@@ -34,7 +43,7 @@ Fakes prove application behavior, not sponsor eligibility.
 
 Explicitly authorized checks for:
 
-- Supabase migrations and atomic date overlap;
+- applying migrations to hosted Supabase;
 - World registration and protected requests;
 - live Graph gateway query;
 - Hedera Testnet HTS transfer;
@@ -57,6 +66,11 @@ Exercise the deployed web and API:
 - conflicting dates fail;
 - expired hold releases dates;
 - evidence links render.
+
+The current Phase 3 integration suite already exercises the API portion through
+Listing publication, search, deterministic quote creation, atomic hold,
+automatic approval, Host review, Host decision, idempotent retry, and
+conflicting-date rejection.
 
 ## Required negative cases
 
@@ -119,7 +133,7 @@ The public tester guide should eventually contain:
 
 ## Quality gate
 
-The root check command should eventually run:
+The root check command runs:
 
 ```text
 format check
@@ -132,3 +146,7 @@ Web and deployment changes additionally require a production build.
 
 Live Testnet, hosted database, World, Graph, and paid AI checks remain separate
 opt-in commands.
+
+The PostgreSQL integration suite runs automatically in CI. Locally, set
+`TEST_DATABASE_URL` to an isolated disposable database before `pnpm test` to run
+it; otherwise it is skipped.

@@ -34,15 +34,24 @@ importers:
 
   apps/api:
     dependencies:
+      '@fastify/cors':
+        specifier: 11.3.0
+        version: 11.3.0
       '@nook-rent/config':
         specifier: workspace:*
         version: link:../../packages/config
       '@nook-rent/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@nook-rent/supabase':
+        specifier: workspace:*
+        version: link:../../packages/supabase
       fastify:
         specifier: 5.10.0
         version: 5.10.0
+      zod:
+        specifier: 4.4.3
+        version: 4.4.3
     devDependencies:
       tsx:
         specifier: 4.23.1
@@ -108,6 +117,13 @@ importers:
       '@nook-rent/core':
         specifier: workspace:*
         version: link:../core
+      postgres:
+        specifier: 3.4.9
+        version: 3.4.9
+    devDependencies:
+      tsx:
+        specifier: 4.23.1
+        version: 4.23.1
 
   packages/the-graph:
     dependencies:
@@ -441,6 +457,12 @@ packages:
     resolution:
       {
         integrity: sha512-KoWKW+MhvfTRWL4qrhUwAAZoaChluo0m0vbiJlGMt2GXvL4LVPQEjt8kSpHI3IBq5Rez8fg+XeH3cneztq+C7A==,
+      }
+
+  '@fastify/cors@11.3.0':
+    resolution:
+      {
+        integrity: sha512-ggQGua+xHv1MvePbPr0v//xLYEsCXbWspquXCJS9Ot5YoRXq8J8ZWzHnxDBVnbtXosvistXo6LtNzOJswf64Fw==,
       }
 
   '@fastify/error@4.2.0':
@@ -1208,6 +1230,12 @@ packages:
         integrity: sha512-YPOs1zD5TG2+EZt+r88LwF6mclA7TPkpwMP7ZN3TO2HiHS8TXvq7QA/17iJsV9dubcLo/f8eEYqMBruyQV21hQ==,
       }
 
+  fastify-plugin@6.0.0:
+    resolution:
+      {
+        integrity: sha512-fZOty7z3O7vOliF6d8bHE3wiEh1KcNnKEQensSgTk9C1DvN6nRLS++XVd86v33Hw/8u9Un8A1zDrQ8ujcQDHEg==,
+      }
+
   fastify@5.10.0:
     resolution:
       {
@@ -1621,6 +1649,13 @@ packages:
         integrity: sha512-g50586zr4bZmwFiTlflMu8E0bDTb5I5gertgwAKmsdUlTQIhZtunzUlD1WSzwcVWPoAVpsrA6vlfCD7oXvRwgg==,
       }
     engines: { node: ^10 || ^12 || >=14 }
+
+  postgres@3.4.9:
+    resolution:
+      {
+        integrity: sha512-GD3qdB0x1z9xgFI6cdRD6xu2Sp2WCOEoe3mtnyB5Ee0XrrL5Pe+e4CCnJrRMnL1zYtRDZmQQVbvOttLnKDLnaw==,
+      }
+    engines: { node: '>=12' }
 
   prelude-ls@1.2.1:
     resolution:
@@ -2185,6 +2220,11 @@ snapshots:
       ajv-formats: 3.0.1(ajv@8.20.0)
       fast-uri: 3.1.4
 
+  '@fastify/cors@11.3.0':
+    dependencies:
+      fastify-plugin: 6.0.0
+      toad-cache: 3.7.4
+
   '@fastify/error@4.2.0': {}
 
   '@fastify/fast-json-stringify-compiler@5.1.0':
@@ -2653,6 +2693,8 @@ snapshots:
 
   fast-uri@4.1.1: {}
 
+  fastify-plugin@6.0.0: {}
+
   fastify@5.10.0:
     dependencies:
       '@fastify/ajv-compiler': 4.0.5
@@ -2874,6 +2916,8 @@ snapshots:
       nanoid: 3.3.16
       picocolors: 1.1.1
       source-map-js: 1.2.1
+
+  postgres@3.4.9: {}
 
   prelude-ls@1.2.1: {}
 

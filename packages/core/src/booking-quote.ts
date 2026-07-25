@@ -44,6 +44,7 @@ export function createBookingQuote(input: {
   listingId: string;
   guestProfileId: string;
   stayRange: StayRange;
+  settlementTokenId: string;
   nightlyRate: TokenAmount;
   baseDeposit: TokenAmount;
   reputationTier: RentalReputationTier;
@@ -60,6 +61,10 @@ export function createBookingQuote(input: {
 
   if (input.guestProfileId.trim().length === 0) {
     throw new DomainValidationError('guest profile ID is required');
+  }
+
+  if (input.settlementTokenId.trim().length === 0) {
+    throw new DomainValidationError('settlement token ID is required');
   }
 
   if (input.nightlyRate.isZero() || input.baseDeposit.isZero()) {
@@ -82,6 +87,7 @@ export function createBookingQuote(input: {
     listingId: input.listingId,
     guestProfileId: input.guestProfileId,
     stayRange: input.stayRange,
+    settlementTokenId: input.settlementTokenId,
     nightlyRate: input.nightlyRate,
     staySubtotal,
     baseDeposit: input.baseDeposit,

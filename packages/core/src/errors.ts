@@ -11,3 +11,23 @@ export class InvalidStateTransitionError extends Error {
     this.name = 'InvalidStateTransitionError';
   }
 }
+
+export class ResourceNotFoundError extends Error {
+  constructor(
+    readonly resource: string,
+    readonly resourceId: string,
+  ) {
+    super(`${resource} not found: ${resourceId}`);
+    this.name = 'ResourceNotFoundError';
+  }
+}
+
+export class DomainConflictError extends Error {
+  constructor(
+    readonly conflict: string,
+    message: string,
+  ) {
+    super(message);
+    this.name = 'DomainConflictError';
+  }
+}

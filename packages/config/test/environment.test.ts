@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { parseServerEnvironment } from '../src/index.js';
+import { parseDatabaseEnvironment, parseServerEnvironment } from '../src/index.js';
 
 describe('parseServerEnvironment', () => {
   it('provides safe local defaults', () => {
@@ -34,5 +34,19 @@ describe('parseServerEnvironment', () => {
         API_PORT: '70000',
       }),
     ).toThrow();
+  });
+});
+
+describe('parseDatabaseEnvironment', () => {
+  it('requires a server-only database connection string', () => {
+    expect(
+      parseDatabaseEnvironment({
+        SUPABASE_DB_URL: 'postgresql://localhost/nook',
+      }),
+    ).toEqual({
+      connectionString: 'postgresql://localhost/nook',
+    });
+
+    expect(() => parseDatabaseEnvironment({})).toThrow();
   });
 });

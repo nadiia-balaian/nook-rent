@@ -13,5 +13,6 @@ Current packages:
 Provider packages implement ports owned by `core`. They do not call one another
 or contain cross-provider orchestration.
 
-Only `core` and `config` contain implemented Phase 1 behavior. Provider packages
-are explicit boundaries for later adapters and do not claim live integrations.
+`core`, `config`, and the server-side `supabase` adapter contain implemented
+behavior. Other provider packages are explicit boundaries for later adapters
+and do not claim live integrations.

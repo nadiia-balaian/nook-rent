@@ -1,4 +1,14 @@
-import type { Booking, Listing, ReservationHold, RentalReputationTier } from './entities.js';
+import type { ApprovalPolicy } from './approval-policy.js';
+import type {
+  AvailabilityWindow,
+  Booking,
+  BookingQuote,
+  BookingRequest,
+  Listing,
+  MemberProfile,
+  ReservationHold,
+  RentalReputationTier,
+} from './entities.js';
 import type { StayRange } from './local-date.js';
 import type { TokenAmount } from './token-amount.js';
 
@@ -24,6 +34,33 @@ export interface ListingRepositoryPort {
   search(input: ListingSearch): Promise<Listing[]>;
 }
 
+export interface MemberProfileRepositoryPort {
+  getById(id: string): Promise<MemberProfile | undefined>;
+  save(profile: MemberProfile): Promise<void>;
+}
+
+export interface AvailabilityWindowRepositoryPort {
+  listForListing(listingId: string): Promise<AvailabilityWindow[]>;
+  replaceForListing(listingId: string, windows: AvailabilityWindow[]): Promise<void>;
+}
+
+export interface BookingQuoteRepositoryPort {
+  getById(id: string): Promise<BookingQuote | undefined>;
+  save(quote: BookingQuote): Promise<void>;
+}
+
+export interface StoredListingApprovalPolicy {
+  listingId: string;
+  policy: ApprovalPolicy;
+  version: number;
+  updatedAt: string;
+}
+
+export interface ListingApprovalPolicyRepositoryPort {
+  getByListingId(listingId: string): Promise<StoredListingApprovalPolicy | undefined>;
+  save(policy: StoredListingApprovalPolicy): Promise<void>;
+}
+
 export interface CreateReservationHoldInput {
   requestId: string;
   listingId: string;
@@ -41,13 +78,21 @@ export type CreateReservationHoldResult =
 
 export interface ReservationHoldRepositoryPort {
   createActive(input: CreateReservationHoldInput): Promise<CreateReservationHoldResult>;
+  expireActive(input: { now: string; limit: number }): Promise<ReservationHold[]>;
   getById(id: string): Promise<ReservationHold | undefined>;
   save(hold: ReservationHold): Promise<void>;
 }
 
 export interface BookingRepositoryPort {
   getById(id: string): Promise<Booking | undefined>;
+  getByHoldId(holdId: string): Promise<Booking | undefined>;
   save(booking: Booking): Promise<void>;
+}
+
+export interface BookingRequestRepositoryPort {
+  getByHoldId(holdId: string): Promise<BookingRequest | undefined>;
+  getById(id: string): Promise<BookingRequest | undefined>;
+  save(request: BookingRequest): Promise<void>;
 }
 
 export interface HumanBackedAuthorization {

@@ -12,3 +12,18 @@ Rules:
   configuration;
 - atomic Reservation Hold creation must prevent overlapping dates;
 - hosted migration execution requires explicit authorization.
+
+## Current implementation
+
+The migrations create an isolated `nook` schema containing the marketplace
+tables, Listing pricing terms, idempotency constraints, default-deny row-level
+security, atomic hold function, and bounded expiry function. They pass the
+repository and marketplace API integration suites against local PostgreSQL.
+
+To apply the migration to an explicitly selected database:
+
+```text
+SUPABASE_DB_URL=... pnpm supabase:migrate
+```
+
+This command is intentionally not part of the normal development or CI flow.

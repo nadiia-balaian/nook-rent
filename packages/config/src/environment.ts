@@ -11,11 +11,19 @@ const serverEnvironmentSchema = z.object({
   ALLOWED_ORIGINS: z.string().optional(),
 });
 
+const databaseEnvironmentSchema = z.object({
+  SUPABASE_DB_URL: z.string().min(1),
+});
+
 export interface ServerEnvironment {
   nodeEnvironment: 'development' | 'test' | 'production';
   apiHost: string;
   apiPort: number;
   allowedOrigins: string[];
+}
+
+export interface DatabaseEnvironment {
+  connectionString: string;
 }
 
 export function parseServerEnvironment(
@@ -31,5 +39,15 @@ export function parseServerEnvironment(
       parsed.ALLOWED_ORIGINS?.split(',')
         .map((origin) => origin.trim())
         .filter((origin) => origin.length > 0) ?? [],
+  };
+}
+
+export function parseDatabaseEnvironment(
+  environment: Record<string, string | undefined>,
+): DatabaseEnvironment {
+  const parsed = databaseEnvironmentSchema.parse(environment);
+
+  return {
+    connectionString: parsed.SUPABASE_DB_URL,
   };
 }
