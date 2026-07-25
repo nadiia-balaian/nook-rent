@@ -711,7 +711,7 @@ export function createApi(options: CreateApiOptions = {}): FastifyInstance {
       quoteId: input.quoteId,
       idempotencyKey,
     });
-    const body = await response.json();
+    const body: unknown = await response.json();
 
     return reply.header('cache-control', 'no-store').code(response.status).send(body);
   });

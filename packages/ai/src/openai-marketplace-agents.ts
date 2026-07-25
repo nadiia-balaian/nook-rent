@@ -8,7 +8,7 @@ import type {
   ListingRankingPort,
   ListingRecommendation,
 } from '@nook-rent/core';
-import OpenAI from 'openai';
+import { OpenAI } from 'openai';
 import { zodTextFormat } from 'openai/helpers/zod';
 import type { ResponseInputContent } from 'openai/resources/responses/responses';
 
