@@ -41,9 +41,9 @@ rental behavior.
 
 ## Repository status
 
-Phases 1–7 are complete and Phase 8 is implemented locally. Hedera, World
-AgentKit, and The Graph have produced verified live evidence; the constrained
-OpenAI path is ready for one opt-in live smoke test:
+Phases 1–7 are complete and Phase 8 is implemented. Hedera, World AgentKit, and
+The Graph have produced verified live evidence; the constrained OpenAI path is
+ready for one opt-in live smoke test:
 
 - `pnpm` TypeScript monorepo and shared quality gate;
 - Fastify API shell with a tested health endpoint;
@@ -61,11 +61,14 @@ OpenAI path is ready for one opt-in live smoke test:
   Reservation Holds, Host decisions, and Booking status;
 - stable request IDs and error envelopes;
 - pseudonymous seed data for two Lisbon Listings and both approval paths.
-- responsive Guest and Host demo desks;
-- search, quote, automatic approval, manual Host review, and Booking status UI;
+- responsive, guided Host and Guest demo flows with calm Nook brand tokens and
+  project-owned Lisbon Listing imagery;
+- onboarding, natural-language search, Listing detail, exact quote, automatic
+  approval, manual Host review, Booking status, and confirmation screens;
 - Host-controlled Listing draft and publish flow;
 - explicit loading, unavailable, empty, expired, rejected, and failed states;
-- an evidence panel that distinguishes implemented and planned integrations;
+- evidence states that distinguish live provider results, pending checks, and
+  clearly labeled demo Rental Reputation;
 - browser-level tests for both approval paths.
 - durable, idempotent HTS deposit Operations with safe reconciliation;
 - Mirror Node confirmation before Booking finalization;

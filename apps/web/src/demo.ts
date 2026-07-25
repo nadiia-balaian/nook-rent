@@ -7,13 +7,15 @@ export const DEMO_PROFILES = {
   experiencedGuest: {
     id: '20000000-0000-4000-8000-000000000001',
     name: 'Alex',
-    label: 'Silver · 3 completed stays',
+    label: 'Experienced Guest demo',
+    reputationLabel: 'Silver · 3 verified stays',
     tier: 'silver',
   },
   newcomerGuest: {
     id: '20000000-0000-4000-8000-000000000002',
     name: 'Jo',
-    label: 'Newcomer · Host review',
+    label: 'Newcomer demo',
+    reputationLabel: 'Newcomer · no verified stays yet',
     tier: 'newcomer',
   },
 } as const;

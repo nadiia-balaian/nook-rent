@@ -1,6 +1,6 @@
 # Nook.rent implementation plan
 
-Status: active; Phases 0–7 complete, Phase 8 implemented locally
+Status: active; Phases 0–7 complete, Phase 8 implemented; live smoke pending
 Strategy: build one end-to-end tracer bullet, then deepen it
 
 ## Completion rule
@@ -41,7 +41,7 @@ Exit check:
 
 Estimate: 3–5 focused hours
 
-Status: implemented locally on 2026-07-25
+Status: implemented and refined into a guided demo flow on 2026-07-25
 
 Create:
 
@@ -150,6 +150,17 @@ Implement:
 - Host review screen;
 - sponsor evidence panel;
 - explicit loading, unavailable, expired, rejected, and failed states.
+
+Refined demo UI:
+
+- calm Nook visual system using Woven Linen, Hearth Pine, and Welcome Clay;
+- responsive screen-by-screen Host and Guest journeys;
+- project-owned generated Lisbon Listing imagery with no external hotlinks;
+- natural-language Guest Agent search and valid-only match explanations;
+- explicit review gates for Agent copy and Listing publication;
+- separate presentation of demo Rental Reputation, World authorization, Graph
+  Agent0 signals, and Hedera Testnet evidence;
+- safe future Check-in Instructions teaser with no fake access secrets.
 
 Exit check:
 
@@ -354,6 +365,9 @@ Remaining live exit:
 
 Estimate: 3–5 focused hours
 
+Status: backend projection deferred temporarily; the guided UI uses explicitly
+labeled seeded demo tiers only.
+
 Implement:
 
 - versioned rental-event envelope;
@@ -426,11 +440,13 @@ Provider access or registration delays may add time.
 
 ## Next coding task
 
-Complete the Phase 8 live smoke test, then continue with Phase 9:
+Complete the Phase 8 live smoke test, then prioritize deployment and demo
+hardening. The real Phase 9 projection may follow after the UI tracer is ready:
 
 ```text
-feat: add Rental Reputation projection
+chore: harden deployed demo flow
 ```
 
-Phase 9 derives versioned Rental Reputation only from verified rental events;
-World and Graph signals remain separate.
+Until Phase 9 is implemented, seeded tiers must stay labeled as demo data and
+must never be presented as live HCS evidence. World and Graph signals remain
+separate.

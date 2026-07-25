@@ -1,35 +1,33 @@
 import {
   AlertTriangle,
+  ArrowLeft,
   ArrowRight,
+  BedDouble,
   Building2,
   CalendarDays,
+  Camera,
   Check,
   CheckCircle2,
+  ChevronRight,
   Clock3,
   Coins,
-  Database,
   ExternalLink,
   Globe2,
-  Home,
+  House,
+  ImagePlus,
+  KeyRound,
   LoaderCircle,
+  LockKeyhole,
   MapPin,
   Network,
-  RotateCcw,
+  RefreshCw,
   Search,
   ShieldCheck,
   Sparkles,
-  Users,
   WalletCards,
   XCircle,
 } from 'lucide-react';
-import {
-  useEffect,
-  useState,
-  type Dispatch,
-  type FormEvent,
-  type ReactNode,
-  type SetStateAction,
-} from 'react';
+import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 
 import {
   type AgentExecution,
@@ -44,16 +42,26 @@ import {
   type ReservationResult,
   type SearchInput,
 } from './api.js';
-import {
-  BOOKING_STEPS,
-  DEFAULT_GUEST_QUERY,
-  DEFAULT_SEARCH,
-  DEMO_PROFILES,
-  type DemoGuestKey,
-} from './demo.js';
+import { DEFAULT_GUEST_QUERY, DEFAULT_SEARCH, DEMO_PROFILES, type DemoGuestKey } from './demo.js';
 
 type DemoRole = 'guest' | 'host';
 type ApiStatus = 'checking' | 'ready' | 'unavailable';
+type Screen =
+  | 'splash'
+  | 'role'
+  | 'identity'
+  | 'signals'
+  | 'host-create'
+  | 'host-review'
+  | 'host-terms'
+  | 'listed'
+  | 'guest-search'
+  | 'results'
+  | 'detail'
+  | 'booking'
+  | 'host-decision'
+  | 'confirmed'
+  | 'check-in';
 type BusyAction =
   | 'create-listing'
   | 'decide'
@@ -68,14 +76,14 @@ type BusyAction =
 
 const initialListingDraft = {
   propertyType: 'one-bedroom home',
-  highlights: 'calm courtyard, dedicated work corner',
-  title: 'Sunny Graça home with a work corner',
+  highlights: 'sunny balcony, dedicated work corner, calm courtyard',
+  title: 'Sunlit Graça nook with a work corner',
   description:
-    'A calm one-bedroom home for a short Lisbon stay, with fast Wi-Fi and a dedicated work corner.',
+    'A calm one-bedroom home for a short Lisbon stay, with a sunny balcony, fast Wi-Fi, and a dedicated work corner.',
   city: 'Lisbon',
   neighborhood: 'Graça',
   approximateLocationRef: 'lisbon-graca-demo-area',
-  amenities: 'wifi, desk, washer',
+  amenities: 'wifi, workspace, kitchen, washer, balcony',
   houseRules: 'No smoking, Quiet after 22:00',
   nightlyRateAtomic: '11000',
   baseDepositAtomic: '50000',
@@ -83,6 +91,22 @@ const initialListingDraft = {
   checkIn: '2026-09-05',
   checkOut: '2026-09-15',
 };
+
+const LISTING_IMAGES = [
+  '/images/nook-arroios.jpg',
+  '/images/nook-alfama.jpg',
+  '/images/nook-graca.jpg',
+] as const;
+
+function imageForListing(listing: Listing | null, index = 0): string {
+  if (!listing) return LISTING_IMAGES[0];
+
+  if (/alfama/i.test(listing.neighborhood)) return LISTING_IMAGES[1];
+  if (/graça|graca/i.test(listing.neighborhood)) return LISTING_IMAGES[2];
+  if (/arroios/i.test(listing.neighborhood)) return LISTING_IMAGES[0];
+
+  return LISTING_IMAGES[(index + 1) % LISTING_IMAGES.length] ?? LISTING_IMAGES[0];
+}
 
 function formatAtomicUnits(value: string): string {
   try {
@@ -113,28 +137,28 @@ function friendlyError(error: NookApiError): string {
     case 'dates_unavailable':
       return 'Those dates were just reserved. Choose another stay or listing.';
     case 'resource_not_found':
-      return 'The demo data is not ready yet. Ask the demo owner to initialize it.';
+      return 'The demo data is not ready. Initialize the Nook.rent seed data, then try again.';
     case 'domain_validation_error':
     case 'validation_error':
       return 'Check the dates and details, then try again.';
     case 'booking_request_already_decided':
       return 'This request has already been decided.';
     case 'hedera_unavailable':
-      return 'Hedera Testnet is not configured yet. Add the new Nook.rent Testnet resources to the API environment.';
+      return 'Hedera Testnet is not configured in the API environment.';
     case 'human_backed_authorization_required':
-      return 'A World-verified Guest Agent must authorize this hold. Use the Guest Agent flow, then try again.';
+      return 'This protected hold needs a World-verified Guest Agent. The visual onboarding preview does not replace the live AgentKit proof.';
     case 'agent_not_human_backed':
       return 'World could not confirm that this Agent acts for a verified human.';
     case 'invalid_agentkit_proof':
-      return 'The World AgentKit authorization is invalid or expired. Ask the Guest Agent to sign a fresh request.';
+      return 'The World AgentKit authorization is invalid or expired.';
     case 'world_nonce_replayed':
-      return 'This World authorization was already used. Ask the Guest Agent to sign a fresh request.';
+      return 'This World authorization was already used. Sign a fresh request.';
     case 'human_active_hold_limit':
-      return 'This verified human already has an active hold. Complete or release it before holding another home.';
+      return 'This verified human already has an active hold.';
     case 'world_unavailable':
       return 'World AgentKit is not configured on the API yet.';
     case 'agent_not_registered':
-      return 'This human-backed Agent is not registered in the Agent0 registry yet.';
+      return 'This human-backed Agent is not registered in Agent0 yet.';
     case 'agent_registration_inactive':
       return 'This Agent0 registration is inactive.';
     case 'agent_capability_missing':
@@ -142,13 +166,18 @@ function friendlyError(error: NookApiError): string {
     case 'provider_timeout':
     case 'provider_unavailable':
     case 'invalid_provider_response':
-      return 'The live Agent0 query through The Graph is temporarily unavailable. No dates were held.';
+      return 'The live Agent0 query through The Graph is unavailable. No dates were held.';
     default:
       return error.message || 'Something went wrong. Please try again.';
   }
 }
 
+function nextAfterOnboarding(role: DemoRole): Screen {
+  return role === 'host' ? 'host-create' : 'guest-search';
+}
+
 export function App() {
+  const [screen, setScreen] = useState<Screen>('splash');
   const [role, setRole] = useState<DemoRole>('guest');
   const [apiStatus, setApiStatus] = useState<ApiStatus>('checking');
   const [busyAction, setBusyAction] = useState<BusyAction>(null);
@@ -157,7 +186,7 @@ export function App() {
   const [guestQuery, setGuestQuery] = useState(DEFAULT_GUEST_QUERY);
   const [guestAgentSearch, setGuestAgentSearch] = useState<GuestAgentSearchResult | null>(null);
   const [search, setSearch] = useState<SearchInput>({ ...DEFAULT_SEARCH });
-  const [listings, setListings] = useState<Listing[] | null>(null);
+  const [listings, setListings] = useState<Listing[]>([]);
   const [selectedListing, setSelectedListing] = useState<Listing | null>(null);
   const [quote, setQuote] = useState<BookingQuote | null>(null);
   const [reservation, setReservation] = useState<ReservationResult | null>(null);
@@ -167,7 +196,6 @@ export function App() {
   const [createdListing, setCreatedListing] = useState<ListingDetail | null>(null);
 
   const selectedGuest = DEMO_PROFILES[guestKey];
-  const quoteExpired = quote ? Date.parse(quote.expiresAt) <= Date.now() : false;
 
   const checkApi = async () => {
     setApiStatus('checking');
@@ -183,13 +211,27 @@ export function App() {
     void checkApi();
   }, []);
 
-  const resetGuestFlow = (nextGuestKey = guestKey) => {
-    setGuestKey(nextGuestKey);
+  const navigate = (next: Screen) => {
+    setError(null);
+    setScreen(next);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const resetDemo = () => {
+    setScreen('splash');
+    setRole('guest');
+    setGuestKey('experiencedGuest');
+    setGuestQuery(DEFAULT_GUEST_QUERY);
+    setGuestAgentSearch(null);
+    setSearch({ ...DEFAULT_SEARCH });
+    setListings([]);
     setSelectedListing(null);
     setQuote(null);
     setReservation(null);
     setDeposit(null);
-    setGuestAgentSearch(null);
+    setListingDraft(initialListingDraft);
+    setHostAgentDraft(null);
+    setCreatedListing(null);
     setError(null);
   };
 
@@ -211,6 +253,20 @@ export function App() {
     }
   };
 
+  const selectRole = (nextRole: DemoRole) => {
+    setRole(nextRole);
+    navigate('identity');
+  };
+
+  const changeGuest = (nextGuestKey: DemoGuestKey) => {
+    setGuestKey(nextGuestKey);
+    setSelectedListing(null);
+    setQuote(null);
+    setReservation(null);
+    setDeposit(null);
+    setError(null);
+  };
+
   const searchListings = async (event: FormEvent) => {
     event.preventDefault();
     setSelectedListing(null);
@@ -219,14 +275,10 @@ export function App() {
     setDeposit(null);
 
     const result = await runAction('search', () => nookApi.searchWithGuestAgent(guestQuery));
-
     if (!result) return;
 
     setGuestAgentSearch(result);
-    if (result.status === 'needs_clarification') {
-      setListings(null);
-      return;
-    }
+    if (result.status === 'needs_clarification') return;
 
     setSearch({
       city: result.interpretation.city,
@@ -241,9 +293,10 @@ export function App() {
       amenities: result.interpretation.requiredAmenities.join(', '),
     });
     setListings(result.items.map((item) => item.listing));
+    navigate('results');
   };
 
-  const createQuote = async (listing: Listing) => {
+  const openListing = async (listing: Listing) => {
     setSelectedListing(listing);
     setReservation(null);
     setDeposit(null);
@@ -255,7 +308,10 @@ export function App() {
         checkOut: search.checkOut,
       }),
     );
-    if (result) setQuote(result);
+    if (result) {
+      setQuote(result);
+      navigate('detail');
+    }
   };
 
   const reserveDates = async () => {
@@ -267,7 +323,10 @@ export function App() {
         idempotencyKey: `nook-ui-${quote.id}`,
       }),
     );
-    if (result) setReservation(result);
+    if (result) {
+      setReservation(result);
+      navigate('booking');
+    }
   };
 
   const fundDeposit = async () => {
@@ -287,6 +346,7 @@ export function App() {
         booking: result.booking,
         hold: result.hold,
       });
+      navigate(result.operation.status === 'confirmed' ? 'confirmed' : 'booking');
     }
   };
 
@@ -308,6 +368,7 @@ export function App() {
             }
           : current,
       );
+      if (result.operation.status === 'confirmed') navigate('confirmed');
     }
   };
 
@@ -368,7 +429,23 @@ export function App() {
         title: result.draft.title,
         description: result.draft.description,
       }));
+      navigate('host-review');
     }
+  };
+
+  const addSuggestedAmenity = (amenity: string) => {
+    setListingDraft((current) => {
+      const amenities = current.amenities
+        .split(',')
+        .map((value) => value.trim())
+        .filter(Boolean);
+
+      if (amenities.some((value) => value.toLowerCase() === amenity.toLowerCase())) {
+        return current;
+      }
+
+      return { ...current, amenities: [...amenities, amenity].join(', ') };
+    });
   };
 
   const createListing = async () => {
@@ -413,1018 +490,560 @@ export function App() {
     const result = await runAction('publish-listing', () =>
       nookApi.publishListing(createdListing.listing.id),
     );
-    if (result) setCreatedListing(result);
+    if (result) {
+      setCreatedListing(result);
+      navigate('listed');
+    }
   };
 
-  return (
-    <div className="app-shell">
-      <header className="topbar">
-        <a className="brand" href="#top" aria-label="Nook.rent home">
-          <span className="brand-mark">
-            <Home size={17} strokeWidth={2.4} />
-          </span>
-          <span>Nook.rent</span>
-        </a>
-
-        <div className="role-switch" aria-label="Demo role">
-          <button
-            className={role === 'guest' ? 'active' : ''}
-            type="button"
-            onClick={() => setRole('guest')}
-          >
-            <Search size={15} />
-            Guest
-          </button>
-          <button
-            className={role === 'host' ? 'active' : ''}
-            type="button"
-            onClick={() => setRole('host')}
-          >
-            <Building2 size={15} />
-            Host desk
-            {reservation?.bookingRequest.status === 'pending' && (
-              <span className="notification-dot" aria-label="Pending request" />
-            )}
-          </button>
-        </div>
-
-        <ApiStatusChip status={apiStatus} />
-      </header>
-
-      {apiStatus === 'unavailable' && (
-        <div className="service-banner" role="alert">
-          <div>
-            <AlertTriangle size={18} />
-            <span>
-              <strong>The marketplace is unavailable.</strong> The API or database could not be
-              reached.
-            </span>
-          </div>
-          <button type="button" onClick={() => void checkApi()}>
-            <RotateCcw size={15} />
-            Retry
-          </button>
-        </div>
-      )}
-
-      <main id="top">
-        {role === 'guest' ? (
-          <GuestExperience
+  const renderScreen = () => {
+    switch (screen) {
+      case 'splash':
+        return <SplashScreen apiStatus={apiStatus} onStart={() => navigate('role')} />;
+      case 'role':
+        return <RoleScreen onBack={() => navigate('splash')} onSelect={selectRole} />;
+      case 'identity':
+        return (
+          <IdentityScreen onBack={() => navigate('role')} onContinue={() => navigate('signals')} />
+        );
+      case 'signals':
+        return (
+          <SignalsScreen
+            onBack={() => navigate('identity')}
+            onContinue={() => navigate(nextAfterOnboarding(role))}
+          />
+        );
+      case 'host-create':
+        return (
+          <HostCreateScreen
+            busy={busyAction === 'prepare-listing-draft'}
+            draft={listingDraft}
+            error={error}
+            onBack={() => navigate('signals')}
+            onSubmit={prepareListingDraft}
+            setDraft={setListingDraft}
+          />
+        );
+      case 'host-review':
+        return hostAgentDraft ? (
+          <HostReviewScreen
+            agentDraft={hostAgentDraft}
+            draft={listingDraft}
+            onAddAmenity={addSuggestedAmenity}
+            onBack={() => navigate('host-create')}
+            onContinue={() => navigate('host-terms')}
+            setDraft={setListingDraft}
+          />
+        ) : null;
+      case 'host-terms':
+        return (
+          <HostTermsScreen
+            busyAction={busyAction}
+            createdListing={createdListing}
+            draft={listingDraft}
+            error={error}
+            onBack={() => navigate('host-review')}
+            onCreate={createListing}
+            onPublish={publishListing}
+            setDraft={setListingDraft}
+          />
+        );
+      case 'listed':
+        return (
+          <ListedScreen
+            listing={createdListing}
+            onGuestView={() => {
+              setRole('guest');
+              navigate('guest-search');
+            }}
+          />
+        );
+      case 'guest-search':
+        return (
+          <GuestSearchScreen
+            agentSearch={guestAgentSearch}
+            busy={busyAction === 'search'}
+            error={error}
+            guestKey={guestKey}
+            guestQuery={guestQuery}
+            onBack={() => navigate('signals')}
+            onGuestChange={changeGuest}
+            onQueryChange={setGuestQuery}
+            onSubmit={searchListings}
+          />
+        );
+      case 'results':
+        return (
+          <ResultsScreen
+            agentSearch={guestAgentSearch}
+            busy={busyAction === 'quote'}
+            guestKey={guestKey}
+            listings={listings}
+            onBack={() => navigate('guest-search')}
+            onOpen={openListing}
+            search={search}
+            selectedListing={selectedListing}
+          />
+        );
+      case 'detail':
+        return selectedListing && quote ? (
+          <DetailScreen
+            busy={busyAction === 'reserve'}
+            error={error}
+            guestKey={guestKey}
+            listing={selectedListing}
+            onBack={() => navigate('results')}
+            onReserve={reserveDates}
+            quote={quote}
+          />
+        ) : null;
+      case 'booking':
+        return reservation ? (
+          <BookingScreen
             busyAction={busyAction}
             deposit={deposit}
             error={error}
             guestKey={guestKey}
-            guestQuery={guestQuery}
-            guestAgentSearch={guestAgentSearch}
-            listings={listings}
-            quote={quote}
-            quoteExpired={quoteExpired}
+            onBack={() => navigate('detail')}
+            onFund={fundDeposit}
+            onHostReview={() => {
+              setRole('host');
+              navigate('host-decision');
+            }}
+            onReconcile={reconcileDeposit}
             reservation={reservation}
-            search={search}
-            selectedListing={selectedListing}
-            onFundDeposit={fundDeposit}
-            onGuestChange={resetGuestFlow}
-            onQuote={createQuote}
-            onReconcileDeposit={reconcileDeposit}
-            onReserve={reserveDates}
-            onSearch={searchListings}
-            setGuestQuery={setGuestQuery}
-            switchToHost={() => setRole('host')}
           />
-        ) : (
-          <HostExperience
-            busyAction={busyAction}
-            createdListing={createdListing}
-            error={error}
-            listingDraft={listingDraft}
-            hostAgentDraft={hostAgentDraft}
-            reservation={reservation}
-            onCreateListing={createListing}
+        ) : null;
+      case 'host-decision':
+        return reservation ? (
+          <HostDecisionScreen
+            busy={busyAction === 'decide'}
+            onBack={() => {
+              setRole('guest');
+              navigate('booking');
+            }}
             onDecision={decideRequest}
-            onPrepareListingDraft={prepareListingDraft}
-            onPublishListing={publishListing}
-            setListingDraft={setListingDraft}
-            switchToGuest={() => setRole('guest')}
+            reservation={reservation}
           />
-        )}
+        ) : null;
+      case 'confirmed':
+        return reservation && deposit ? (
+          <ConfirmedScreen
+            deposit={deposit}
+            listing={selectedListing}
+            onCheckIn={() => navigate('check-in')}
+            reservation={reservation}
+          />
+        ) : null;
+      case 'check-in':
+        return <CheckInTeaser onBack={() => navigate('confirmed')} />;
+    }
+  };
 
-        <EvidencePanel deposit={deposit} reservation={reservation} />
+  const compact = ['splash', 'role', 'identity', 'signals'].includes(screen);
+  const wide = screen === 'results';
+
+  return (
+    <div className="nook-app">
+      {screen !== 'splash' && (
+        <AppHeader
+          apiStatus={apiStatus}
+          onReset={resetDemo}
+          onRetryApi={() => void checkApi()}
+          role={role}
+        />
+      )}
+
+      <main className={`screen-stage ${compact ? 'compact' : ''} ${wide ? 'wide' : ''}`}>
+        <div className="screen-fade" key={screen}>
+          {renderScreen()}
+        </div>
       </main>
 
-      <footer>
-        <span>Nook.rent · ETHGlobal Lisbon 2026</span>
-        <span>3–90 night stays · Testnet-only settlement</span>
-      </footer>
-    </div>
-  );
-}
-
-function ApiStatusChip({ status }: { status: ApiStatus }) {
-  return (
-    <div className={`api-chip ${status}`}>
-      {status === 'checking' ? (
-        <LoaderCircle className="spin" size={14} />
-      ) : (
-        <span className="status-dot" />
+      {screen !== 'splash' && (
+        <footer className="site-footer">
+          <span>Nook.rent · ETHGlobal Lisbon 2026</span>
+          <span>3–90 nights · Hedera Testnet settlement</span>
+        </footer>
       )}
-      {status === 'ready'
-        ? 'Marketplace ready'
-        : status === 'checking'
-          ? 'Checking…'
-          : 'Unavailable'}
     </div>
   );
 }
 
-interface GuestExperienceProps {
-  busyAction: BusyAction;
-  deposit: DepositResult | null;
-  error: NookApiError | null;
-  guestAgentSearch: GuestAgentSearchResult | null;
-  guestKey: DemoGuestKey;
-  guestQuery: string;
-  listings: Listing[] | null;
-  quote: BookingQuote | null;
-  quoteExpired: boolean;
-  reservation: ReservationResult | null;
-  search: SearchInput;
-  selectedListing: Listing | null;
-  onFundDeposit: () => Promise<void>;
-  onGuestChange: (guestKey: DemoGuestKey) => void;
-  onQuote: (listing: Listing) => Promise<void>;
-  onReconcileDeposit: () => Promise<void>;
-  onReserve: () => Promise<void>;
-  onSearch: (event: FormEvent) => Promise<void>;
-  setGuestQuery: Dispatch<SetStateAction<string>>;
-  switchToHost: () => void;
-}
-
-function GuestExperience(props: GuestExperienceProps) {
-  const selectedGuest = DEMO_PROFILES[props.guestKey];
-
+function AppHeader({
+  apiStatus,
+  onReset,
+  onRetryApi,
+  role,
+}: {
+  apiStatus: ApiStatus;
+  onReset: () => void;
+  onRetryApi: () => void;
+  role: DemoRole;
+}) {
   return (
     <>
-      <section className="guest-hero">
-        <div className="hero-copy">
-          <p className="eyebrow">
-            <Sparkles size={14} />
-            Temporary stays, clearly coordinated
-          </p>
-          <h1>A home for the in-between.</h1>
-          <p>
-            Find a real place for 3–90 nights. Nook keeps dates, deposits, and approval rules
-            explicit—while your Guest Agent handles the coordination.
-          </p>
-          <div className="hero-trust-row">
-            <span>
-              <ShieldCheck size={17} /> Human-backed actions
-            </span>
-            <span>
-              <CalendarDays size={17} /> Dates held atomically
-            </span>
-            <span>
-              <WalletCards size={17} /> Clear deposit terms
-            </span>
-          </div>
-        </div>
-
-        <form className="search-card" onSubmit={(event) => void props.onSearch(event)}>
-          <div className="search-card-heading">
-            <div>
-              <span className="step-label">Guest Agent · Step 1</span>
-              <h2>Where do you want to stay?</h2>
-            </div>
-            <Search size={23} />
-          </div>
-
-          <label className="field field-wide agent-query">
-            <span>Describe the stay</span>
-            <textarea
-              required
-              rows={3}
-              value={props.guestQuery}
-              onChange={(event) => props.setGuestQuery(event.target.value)}
-            />
-          </label>
-          <p className="agent-boundary-note">
-            The Agent may interpret and rank. Stored availability, price, and approval rules remain
-            deterministic.
-          </p>
-
-          <label className="field field-wide">
-            <span>Parsed city</span>
-            <div className="input-with-icon">
-              <MapPin size={16} />
-              <input readOnly value={props.search.city} />
-            </div>
-          </label>
-
-          <div className="field-row">
-            <label className="field">
-              <span>Parsed check in</span>
-              <input readOnly type="date" value={props.search.checkIn} />
-            </label>
-            <label className="field">
-              <span>Parsed check out</span>
-              <input readOnly type="date" value={props.search.checkOut} />
-            </label>
-          </div>
-
-          <div className="field-row">
-            <label className="field">
-              <span>Parsed guests</span>
-              <input readOnly type="number" value={props.search.guests} />
-            </label>
-            <label className="field">
-              <span>Parsed max nightly · test units</span>
-              <input readOnly value={props.search.maximumNightlyRateAtomic ?? ''} />
-            </label>
-          </div>
-
-          <label className="field field-wide">
-            <span>Parsed must-have amenities</span>
-            <input readOnly value={props.search.amenities} />
-          </label>
-
-          <button className="primary-button search-button" disabled={props.busyAction !== null}>
-            {props.busyAction === 'search' ? (
-              <>
-                <LoaderCircle className="spin" size={17} /> Searching valid dates…
-              </>
-            ) : (
-              <>
-                Show available homes <ArrowRight size={17} />
-              </>
-            )}
-          </button>
-        </form>
-      </section>
-
-      {props.guestAgentSearch?.status === 'needs_clarification' && (
-        <section className="agent-clarification" aria-live="polite">
-          <Sparkles size={19} />
-          <div>
-            <strong>The Guest Agent needs one detail.</strong>
-            <p>{props.guestAgentSearch.question}</p>
-          </div>
-        </section>
-      )}
-
-      {props.guestAgentSearch?.status === 'ready' && (
-        <div className="agent-run-status" aria-live="polite">
-          <Sparkles size={15} />
-          <span>
-            {agentExecutionLabel(props.guestAgentSearch.agent.interpretation)}
-            {props.guestAgentSearch.agent.ranking
-              ? ` · ranking: ${agentExecutionLabel(props.guestAgentSearch.agent.ranking)}`
-              : ''}
+      <header className="app-header">
+        <button className="wordmark" type="button" onClick={onReset}>
+          <NookMark small />
+          <span>Nook</span>
+        </button>
+        <div className="header-actions">
+          <span className="role-label">
+            {role === 'host' ? <Building2 size={14} /> : <Search size={14} />}
+            {role === 'host' ? 'Host flow' : 'Guest flow'}
           </span>
+          <button
+            className={`api-status ${apiStatus}`}
+            type="button"
+            onClick={apiStatus === 'unavailable' ? onRetryApi : undefined}
+          >
+            {apiStatus === 'checking' ? <LoaderCircle className="spin" size={13} /> : <span />}
+            {apiStatus === 'ready'
+              ? 'API ready'
+              : apiStatus === 'checking'
+                ? 'Checking'
+                : 'Retry API'}
+          </button>
+          <button className="reset-button" type="button" onClick={onReset}>
+            <RefreshCw size={14} /> Restart
+          </button>
         </div>
-      )}
-
-      <section className="persona-section" aria-labelledby="persona-heading">
-        <div>
-          <span className="step-label">Demo identity</span>
-          <h2 id="persona-heading">Choose the approval path</h2>
+      </header>
+      {apiStatus === 'unavailable' && (
+        <div className="api-banner" role="alert">
+          <AlertTriangle size={17} />
+          The marketplace API is unavailable. You can preview onboarding, but live actions need the
+          API.
         </div>
-        <div className="persona-grid">
-          {(['experiencedGuest', 'newcomerGuest'] as const).map((key) => {
-            const guest = DEMO_PROFILES[key];
-            const selected = props.guestKey === key;
-            return (
-              <button
-                className={`persona-card ${selected ? 'selected' : ''}`}
-                key={key}
-                type="button"
-                onClick={() => props.onGuestChange(key)}
-              >
-                <span className="avatar">{guest.name.slice(0, 1)}</span>
-                <span>
-                  <strong>{guest.name}</strong>
-                  <small>{guest.label}</small>
-                </span>
-                {selected && (
-                  <span className="selected-check">
-                    <Check size={14} />
-                  </span>
-                )}
-              </button>
-            );
-          })}
-        </div>
-        <p className="persona-note">
-          {selectedGuest.tier === 'silver'
-            ? 'This seeded Guest qualifies for automatic approval under the Host policy.'
-            : 'A Newcomer is never treated as risky. Their request goes to the Host for review.'}
-        </p>
-      </section>
-
-      {props.error && <ErrorCard error={props.error} />}
-
-      {props.listings !== null && (
-        <section className="results-section" aria-labelledby="results-heading">
-          <div className="section-heading">
-            <div>
-              <span className="step-label">Guest Agent · Step 2</span>
-              <h2 id="results-heading">
-                {props.listings.length
-                  ? `${props.listings.length} valid ${props.listings.length === 1 ? 'stay' : 'stays'}`
-                  : 'No valid stays'}
-              </h2>
-            </div>
-            <p>
-              {formatDate(props.search.checkIn)} – {formatDate(props.search.checkOut)} ·{' '}
-              {props.search.guests} guest{props.search.guests === 1 ? '' : 's'}
-            </p>
-          </div>
-
-          {props.listings.length === 0 ? (
-            <EmptyState
-              icon={<CalendarDays size={23} />}
-              title="Nothing matches those dates"
-              text="Try a wider budget, fewer required amenities, or different dates."
-            />
-          ) : (
-            <div className="listing-grid">
-              {props.listings.map((listing, index) => (
-                <article
-                  className={`listing-card ${props.selectedListing?.id === listing.id ? 'selected' : ''}`}
-                  key={listing.id}
-                >
-                  <div className={`listing-visual visual-${(index % 3) + 1}`}>
-                    <span className="availability-badge">
-                      <CheckCircle2 size={14} /> Dates available
-                    </span>
-                    <span className="visual-monogram">{listing.neighborhood.slice(0, 1)}</span>
-                  </div>
-                  <div className="listing-content">
-                    <div className="listing-location">
-                      <MapPin size={14} />
-                      {listing.neighborhood}, {listing.city}
-                    </div>
-                    <h3>{listing.title}</h3>
-                    <p>{listing.description}</p>
-                    {props.guestAgentSearch?.status === 'ready' &&
-                      (() => {
-                        const recommendation = props.guestAgentSearch.items.find(
-                          (item) => item.listing.id === listing.id,
-                        );
-
-                        return recommendation ? (
-                          <div className="agent-match">
-                            <span>
-                              <Sparkles size={13} /> Agent match
-                            </span>
-                            <p>{recommendation.summary}</p>
-                            <small>{recommendation.matchReasons.join(' · ')}</small>
-                          </div>
-                        ) : null;
-                      })()}
-                    <div className="amenity-row">
-                      {listing.amenities.slice(0, 4).map((amenity) => (
-                        <span key={amenity}>{amenity}</span>
-                      ))}
-                    </div>
-                    <div className="listing-footer">
-                      <div>
-                        <strong>{formatAtomicUnits(listing.nightlyRateAtomic)}</strong>
-                        <span> test units / night</span>
-                      </div>
-                      <button
-                        className="secondary-button"
-                        disabled={props.busyAction !== null}
-                        type="button"
-                        onClick={() => void props.onQuote(listing)}
-                      >
-                        {props.busyAction === 'quote' &&
-                        props.selectedListing?.id === listing.id ? (
-                          <LoaderCircle className="spin" size={16} />
-                        ) : (
-                          'View quote'
-                        )}
-                      </button>
-                    </div>
-                  </div>
-                </article>
-              ))}
-            </div>
-          )}
-        </section>
-      )}
-
-      {props.quote && props.selectedListing && (
-        <QuotePanel
-          busyAction={props.busyAction}
-          deposit={props.deposit}
-          listing={props.selectedListing}
-          quote={props.quote}
-          quoteExpired={props.quoteExpired}
-          reservation={props.reservation}
-          onFundDeposit={props.onFundDeposit}
-          onReconcileDeposit={props.onReconcileDeposit}
-          onReserve={props.onReserve}
-          switchToHost={props.switchToHost}
-        />
       )}
     </>
   );
 }
 
-interface QuotePanelProps {
-  busyAction: BusyAction;
-  deposit: DepositResult | null;
-  listing: Listing;
-  quote: BookingQuote;
-  quoteExpired: boolean;
-  reservation: ReservationResult | null;
-  onFundDeposit: () => Promise<void>;
-  onReconcileDeposit: () => Promise<void>;
-  onReserve: () => Promise<void>;
-  switchToHost: () => void;
+function NookMark({ small = false }: { small?: boolean }) {
+  return (
+    <span className={`nook-mark ${small ? 'small' : ''}`} aria-hidden="true">
+      <span />
+    </span>
+  );
 }
 
-function QuotePanel(props: QuotePanelProps) {
+function SplashScreen({ apiStatus, onStart }: { apiStatus: ApiStatus; onStart: () => void }) {
   return (
-    <section className="quote-layout" aria-labelledby="quote-heading">
-      <div className="quote-card">
-        <span className="step-label">Guest Agent · Step 3</span>
-        <div className="quote-heading">
-          <div>
-            <h2 id="quote-heading">Review the exact terms</h2>
-            <p>{props.listing.title}</p>
-          </div>
-          <span className={`quote-timer ${props.quoteExpired ? 'expired' : ''}`}>
-            <Clock3 size={14} />
-            {props.quoteExpired ? 'Quote expired' : 'Held for 15 minutes'}
-          </span>
+    <section className="splash-screen">
+      <div className="splash-copy">
+        <NookMark />
+        <p className="quiet-label">Temporary homes · human-backed coordination</p>
+        <h1>Care, kept close.</h1>
+        <p className="splash-lede">
+          Sublet your place to a verified traveller while you’re away—or find a real home for your
+          next 3–90 night stay.
+        </p>
+        <button className="primary-button large" type="button" onClick={onStart}>
+          Get started <ArrowRight size={18} />
+        </button>
+        <div className={`splash-api-note ${apiStatus}`}>
+          {apiStatus === 'checking' && <LoaderCircle className="spin" size={14} />}
+          {apiStatus === 'ready' && <CheckCircle2 size={14} />}
+          {apiStatus === 'unavailable' && <AlertTriangle size={14} />}
+          {apiStatus === 'ready'
+            ? 'Live marketplace connected'
+            : apiStatus === 'checking'
+              ? 'Connecting to Nook'
+              : 'UI preview available · live actions offline'}
         </div>
-
-        <dl className="quote-lines">
-          <div>
-            <dt>
-              {formatAtomicUnits(props.quote.nightlyRateAtomic)} × {props.quote.nights} nights
-            </dt>
-            <dd>{formatAtomicUnits(props.quote.staySubtotalAtomic)}</dd>
-          </div>
-          <div>
-            <dt>
-              Deposit · <span className="tier-label">{props.quote.reputationTier}</span>
-            </dt>
-            <dd>{formatAtomicUnits(props.quote.quotedDepositAtomic)}</dd>
-          </div>
-          <div className="quote-total">
-            <dt>Total due</dt>
-            <dd>{formatAtomicUnits(props.quote.totalDueAtomic)} test units</dd>
-          </div>
-        </dl>
-
-        <div className="policy-explanation">
-          <ShieldCheck size={19} />
-          <p>
-            {props.quote.reputationTier === 'newcomer'
-              ? 'Newcomers use a higher refundable deposit and a fair Host review path.'
-              : 'Verified rental history qualifies this Guest for the standard deposit.'}
-          </p>
-        </div>
-
-        {!props.reservation && (
-          <button
-            className="primary-button"
-            disabled={props.quoteExpired || props.busyAction !== null}
-            type="button"
-            onClick={() => void props.onReserve()}
-          >
-            {props.busyAction === 'reserve' ? (
-              <>
-                <LoaderCircle className="spin" size={17} /> Reserving dates…
-              </>
-            ) : props.quoteExpired ? (
-              'Quote expired—select the listing again'
-            ) : (
-              <>
-                Reserve these dates <ArrowRight size={17} />
-              </>
-            )}
-          </button>
-        )}
       </div>
-
-      {props.reservation && (
-        <BookingStatusCard
-          busyAction={props.busyAction}
-          deposit={props.deposit}
-          reservation={props.reservation}
-          onFundDeposit={props.onFundDeposit}
-          onReconcileDeposit={props.onReconcileDeposit}
-          switchToHost={props.switchToHost}
-        />
-      )}
+      <div className="splash-visual" aria-label="A warm Lisbon apartment">
+        <img alt="A warm Lisbon apartment with a balcony and work desk" src={LISTING_IMAGES[0]} />
+        <div className="splash-caption">
+          <span>Arroios, Lisbon</span>
+          <strong>A lived-in home for the in-between.</strong>
+        </div>
+      </div>
     </section>
   );
 }
 
-function BookingStatusCard({
-  busyAction,
-  deposit,
-  reservation,
-  onFundDeposit,
-  onReconcileDeposit,
-  switchToHost,
+function RoleScreen({
+  onBack,
+  onSelect,
 }: {
-  busyAction: BusyAction;
-  deposit: DepositResult | null;
-  reservation: ReservationResult;
-  onFundDeposit: () => Promise<void>;
-  onReconcileDeposit: () => Promise<void>;
-  switchToHost: () => void;
+  onBack: () => void;
+  onSelect: (role: DemoRole) => void;
 }) {
-  const currentStatus = reservation.booking.status;
-  const currentIndex = BOOKING_STEPS.findIndex((step) => step.status === currentStatus);
-  const isRejected = currentStatus === 'rejected';
-
   return (
-    <div className={`booking-card ${isRejected ? 'rejected' : ''}`}>
-      <div className="booking-result-icon">
-        {isRejected ? <XCircle size={25} /> : <CheckCircle2 size={25} />}
-      </div>
-      <span className="step-label">Reservation result</span>
-      <h2>
-        {isRejected
-          ? 'Request declined'
-          : currentStatus === 'approval_pending'
-            ? 'Waiting for Maria'
-            : currentStatus === 'confirmed'
-              ? 'Booking confirmed on Hedera'
-              : 'Approved—deposit is next'}
-      </h2>
-      <p>
-        {isRejected
-          ? 'The hold was released, so the dates are available again.'
-          : currentStatus === 'approval_pending'
-            ? 'The dates are safely held while the Host reviews this Newcomer request.'
-            : currentStatus === 'confirmed'
-              ? 'The Testnet deposit is funded and the Booking is confirmed.'
-              : 'The Host policy approved this request. Fund the Testnet deposit to confirm.'}
-      </p>
-
-      <ol className="status-timeline">
-        {BOOKING_STEPS.slice(0, 4).map((step, index) => {
-          const complete = !isRejected && index < currentIndex;
-          const active = !isRejected && index === currentIndex;
-          return (
-            <li
-              className={`${complete ? 'complete' : ''} ${active ? 'active' : ''}`}
-              key={step.status}
-            >
-              <span>{complete ? <Check size={13} /> : index + 1}</span>
-              <small>{step.label}</small>
-            </li>
-          );
-        })}
-      </ol>
-
-      <div className="hold-reference">
-        <Clock3 size={15} />
-        {isRejected || reservation.hold.status === 'released'
-          ? 'Hold released—dates are available again'
-          : reservation.hold.status === 'converted'
-            ? 'Reservation Hold converted into a confirmed Booking'
-            : `Hold active until ${new Date(reservation.hold.expiresAt).toLocaleTimeString([], {
-                hour: '2-digit',
-                minute: '2-digit',
-              })}`}
-      </div>
-
-      {reservation.booking.status === 'approval_pending' && (
-        <button className="secondary-button full-width" type="button" onClick={switchToHost}>
-          Open Host review <ArrowRight size={16} />
+    <FlowPage
+      eyebrow="Step 1 of 3"
+      onBack={onBack}
+      subtitle="How would you like to use Nook today?"
+      title="A familiar welcome."
+    >
+      <div className="role-grid">
+        <button className="choice-card" type="button" onClick={() => onSelect('host')}>
+          <span className="choice-icon">
+            <House size={28} />
+          </span>
+          <span>
+            <strong>I want to rent out my place</strong>
+            <small>
+              I’m travelling and my apartment will be empty. I’d like to host a verified traveller.
+            </small>
+          </span>
+          <ChevronRight size={20} />
         </button>
-      )}
-
-      {reservation.booking.status === 'awaiting_deposit' && !deposit && (
-        <button
-          className="primary-button full-width"
-          disabled={busyAction !== null}
-          type="button"
-          onClick={() => void onFundDeposit()}
-        >
-          {busyAction === 'deposit' ? (
-            <>
-              <LoaderCircle className="spin" size={17} /> Submitting Testnet deposit…
-            </>
-          ) : (
-            <>
-              Fund Testnet deposit <Coins size={17} />
-            </>
-          )}
+        <button className="choice-card" type="button" onClick={() => onSelect('guest')}>
+          <span className="choice-icon">
+            <Search size={28} />
+          </span>
+          <span>
+            <strong>I’m looking for a place</strong>
+            <small>I’m arriving in a new city and want a real home—not a hotel.</small>
+          </span>
+          <ChevronRight size={20} />
         </button>
-      )}
+      </div>
+    </FlowPage>
+  );
+}
 
-      {deposit &&
-        ['pending', 'reserved', 'submitted', 'reconciling'].includes(deposit.operation.status) && (
-          <div className="hedera-operation">
-            <span>Hedera operation · {deposit.operation.status}</span>
-            <p>
-              The transaction identity is reserved. Mirror Node decides the final result before the
-              Booking changes.
-            </p>
-            {deposit.operation.transactionUrl && (
-              <a href={deposit.operation.transactionUrl} rel="noreferrer" target="_blank">
-                View pending transaction <ExternalLink size={13} />
-              </a>
-            )}
-            <button
-              className="secondary-button full-width"
-              disabled={busyAction !== null}
-              type="button"
-              onClick={() => void onReconcileDeposit()}
-            >
-              {busyAction === 'reconcile' ? (
-                <>
-                  <LoaderCircle className="spin" size={16} /> Checking Mirror Node…
-                </>
-              ) : (
-                <>
-                  Reconcile status <RotateCcw size={15} />
-                </>
-              )}
-            </button>
-          </div>
-        )}
-
-      {deposit?.operation.status === 'failed' && (
-        <div className="hedera-operation failed">
-          <strong>Deposit failed safely</strong>
-          <p>The dates were released after Mirror Node confirmed the failure.</p>
+function IdentityScreen({ onBack, onContinue }: { onBack: () => void; onContinue: () => void }) {
+  return (
+    <FlowPage
+      eyebrow="Step 2 of 3"
+      onBack={onBack}
+      subtitle="Nook uses World to verify that protected Agent actions are backed by a unique human."
+      title="Thoughtful by nature."
+    >
+      <div className="identity-card">
+        <div className="world-orb" aria-hidden="true">
+          {Array.from({ length: 30 }).map((_, index) => (
+            <span key={index} />
+          ))}
         </div>
-      )}
+        <span className="preview-badge">Onboarding preview</span>
+        <h2>Human-backed, without public identity</h2>
+        <p>
+          Your passport, face, and World identifier are never shown in a public Listing or Hedera
+          record.
+        </p>
+        <button className="primary-button full-width" type="button" onClick={onContinue}>
+          Continue with demo member <ArrowRight size={17} />
+        </button>
+      </div>
+      <BoundaryNote icon={<ShieldCheck size={18} />}>
+        The live World AgentKit proof runs when the Guest Agent requests a protected hold. This
+        preview does not claim that verification already happened.
+      </BoundaryNote>
+    </FlowPage>
+  );
+}
 
-      {deposit?.operation.status === 'confirmed' && (
-        <div className="hedera-operation confirmed">
-          <strong>
-            <CheckCircle2 size={15} /> Real Testnet evidence
-          </strong>
-          <p>
-            {formatAtomicUnits(deposit.escrow.amountAtomic)} test units funded · token{' '}
-            {deposit.escrow.tokenId}
-          </p>
-          <div className="evidence-links">
-            {deposit.operation.transactionUrl && (
-              <a href={deposit.operation.transactionUrl} rel="noreferrer" target="_blank">
-                HTS transfer <ExternalLink size={13} />
-              </a>
-            )}
-            {deposit.evidence.status === 'confirmed' && deposit.evidence.topicUrl && (
-              <a href={deposit.evidence.topicUrl} rel="noreferrer" target="_blank">
-                HCS #{deposit.evidence.sequenceNumber} <ExternalLink size={13} />
-              </a>
-            )}
-          </div>
-        </div>
-      )}
+function SignalsScreen({ onBack, onContinue }: { onBack: () => void; onContinue: () => void }) {
+  return (
+    <FlowPage
+      eyebrow="Step 3 of 3"
+      onBack={onBack}
+      subtitle="Nook keeps authorization, public onchain signals, and rental history separate."
+      title="Every signal has one job."
+    >
+      <div className="signal-stack">
+        <SignalCard
+          icon={<Globe2 size={22} />}
+          label="World"
+          status="Checked at protected hold"
+          text="Confirms that an Agent acts for a unique human. It does not create Rental Reputation."
+        />
+        <SignalCard
+          icon={<Network size={22} />}
+          label="The Graph"
+          status="Live Agent0 query at hold"
+          text="Confirms active Agent registration and the named Nook.rent booking capability."
+        />
+        <SignalCard
+          demo
+          icon={<BedDouble size={22} />}
+          label="Rental Reputation"
+          status="Demo data for this UI phase"
+          text="Represents verified rental outcomes only. The real HCS projection is the next backend phase."
+        />
+      </div>
+      <button className="primary-button full-width" type="button" onClick={onContinue}>
+        Continue <ArrowRight size={17} />
+      </button>
+    </FlowPage>
+  );
+}
+
+function FlowPage({
+  children,
+  eyebrow,
+  onBack,
+  subtitle,
+  title,
+}: {
+  children: ReactNode;
+  eyebrow: string;
+  onBack: () => void;
+  subtitle: string;
+  title: string;
+}) {
+  return (
+    <section className="flow-page">
+      <button className="back-button" type="button" onClick={onBack}>
+        <ArrowLeft size={16} /> Back
+      </button>
+      <p className="flow-eyebrow">{eyebrow}</p>
+      <h1>{title}</h1>
+      <p className="flow-subtitle">{subtitle}</p>
+      {children}
+    </section>
+  );
+}
+
+function BoundaryNote({ children, icon }: { children: ReactNode; icon: ReactNode }) {
+  return (
+    <div className="boundary-note">
+      {icon}
+      <p>{children}</p>
     </div>
   );
 }
 
-interface HostExperienceProps {
-  busyAction: BusyAction;
-  createdListing: ListingDetail | null;
-  error: NookApiError | null;
-  hostAgentDraft: HostAgentDraftResult | null;
-  listingDraft: typeof initialListingDraft;
-  reservation: ReservationResult | null;
-  onCreateListing: () => Promise<void>;
-  onDecision: (decision: 'approved' | 'rejected') => Promise<void>;
-  onPrepareListingDraft: (event: FormEvent) => Promise<void>;
-  onPublishListing: () => Promise<void>;
-  setListingDraft: Dispatch<SetStateAction<typeof initialListingDraft>>;
-  switchToGuest: () => void;
+function SignalCard({
+  demo = false,
+  icon,
+  label,
+  status,
+  text,
+}: {
+  demo?: boolean;
+  icon: ReactNode;
+  label: string;
+  status: string;
+  text: string;
+}) {
+  return (
+    <article className="signal-card">
+      <span className="signal-icon">{icon}</span>
+      <div>
+        <div className="signal-title">
+          <strong>{label}</strong>
+          <span className={demo ? 'demo' : ''}>{status}</span>
+        </div>
+        <p>{text}</p>
+      </div>
+    </article>
+  );
 }
 
-function HostExperience(props: HostExperienceProps) {
-  const pendingReview =
-    props.reservation?.bookingRequest.status === 'pending' ? props.reservation : null;
-
+function HostCreateScreen({
+  busy,
+  draft,
+  error,
+  onBack,
+  onSubmit,
+  setDraft,
+}: {
+  busy: boolean;
+  draft: typeof initialListingDraft;
+  error: NookApiError | null;
+  onBack: () => void;
+  onSubmit: (event: FormEvent) => Promise<void>;
+  setDraft: React.Dispatch<React.SetStateAction<typeof initialListingDraft>>;
+}) {
   return (
-    <>
-      <section className="host-header">
-        <div>
-          <p className="eyebrow">
-            <Building2 size={14} /> Host desk
-          </p>
-          <h1>Welcome back, Maria.</h1>
-          <p>Publish a home, review requests, and keep every approval decision explicit.</p>
-        </div>
-        <div className="host-stat">
-          <span>Pending review</span>
-          <strong>{pendingReview ? '1' : '0'}</strong>
-        </div>
-      </section>
+    <section className="workspace-page host-create-page">
+      <PageTop
+        eyebrow="Host · Create a Listing"
+        onBack={onBack}
+        subtitle="Start with confirmed public facts. Your Host Agent drafts the copy; you review every inference."
+        title="Show us your nook."
+      />
 
-      {props.error && <ErrorCard error={props.error} />}
-
-      <section className="host-review-section" aria-labelledby="review-heading">
-        <div className="section-heading">
-          <div>
-            <span className="step-label">Approval queue</span>
-            <h2 id="review-heading">Requests needing you</h2>
+      <div className="host-create-grid">
+        <div className="photo-workbench">
+          <div className="photo-hero">
+            <img alt="Sunlit Graça apartment with a balcony" src={LISTING_IMAGES[2]} />
+            <span>
+              <Camera size={15} /> Demo photo set
+            </span>
           </div>
-          <span className="policy-chip">
-            <ShieldCheck size={14} /> Auto-approve Silver+
-          </span>
-        </div>
-
-        {pendingReview ? (
-          <article className="review-card">
-            <div className="review-person">
-              <span className="avatar large">{DEMO_PROFILES.newcomerGuest.name.slice(0, 1)}</span>
-              <div>
-                <span className="tier-badge">Newcomer</span>
-                <h3>{DEMO_PROFILES.newcomerGuest.name} wants to stay</h3>
-                <p>
-                  {formatDate(pendingReview.hold.checkIn)} –{' '}
-                  {formatDate(pendingReview.hold.checkOut)} · {pendingReview.hold.nights} nights
-                </p>
-              </div>
-            </div>
-            <div className="review-facts">
-              <div>
-                <span>Rental reputation</span>
-                <strong>Newcomer</strong>
-              </div>
-              <div>
-                <span>Deposit</span>
-                <strong>{formatAtomicUnits(pendingReview.booking.depositAmountAtomic)}</strong>
-              </div>
-              <div>
-                <span>Date protection</span>
-                <strong>Hold active</strong>
-              </div>
-            </div>
-            <div className="review-note">
-              <ShieldCheck size={18} />
-              <p>
-                Missing history is not negative evidence. Ask what you need, then approve or decline
-                explicitly.
-              </p>
-            </div>
-            <div className="review-actions">
-              <button
-                className="danger-button"
-                disabled={props.busyAction !== null}
-                type="button"
-                onClick={() => void props.onDecision('rejected')}
-              >
-                Decline
-              </button>
-              <button
-                className="primary-button"
-                disabled={props.busyAction !== null}
-                type="button"
-                onClick={() => void props.onDecision('approved')}
-              >
-                {props.busyAction === 'decide' ? (
-                  <>
-                    <LoaderCircle className="spin" size={17} /> Saving decision…
-                  </>
-                ) : (
-                  <>
-                    Approve request <Check size={17} />
-                  </>
-                )}
-              </button>
-            </div>
-          </article>
-        ) : props.reservation &&
-          ['approved', 'rejected'].includes(props.reservation.bookingRequest.status) ? (
-          <div className="decision-complete">
-            {props.reservation.bookingRequest.status === 'approved' ? (
-              <CheckCircle2 size={25} />
-            ) : (
-              <XCircle size={25} />
-            )}
-            <div>
-              <h3>
-                Request{' '}
-                {props.reservation.bookingRequest.status === 'approved' ? 'approved' : 'declined'}
-              </h3>
-              <p>The Guest’s Booking timeline has been updated.</p>
-            </div>
-            <button className="text-button" type="button" onClick={props.switchToGuest}>
-              View Guest status <ArrowRight size={15} />
+          <div className="photo-strip" aria-label="Demo Listing photos">
+            {LISTING_IMAGES.map((image, index) => (
+              <img alt={`Demo Lisbon apartment view ${index + 1}`} key={image} src={image} />
+            ))}
+            <button aria-label="Add photos in a future upload flow" type="button">
+              <ImagePlus size={19} />
             </button>
           </div>
-        ) : (
-          <EmptyState
-            icon={<CheckCircle2 size={23} />}
-            title="Review queue is clear"
-            text="Choose the Newcomer persona in Guest mode to create the manual-review path."
-          />
-        )}
-      </section>
-
-      <section className="listing-builder" aria-labelledby="builder-heading">
-        <div className="builder-intro">
-          <span className="step-label">Host Agent · Listing draft</span>
-          <h2 id="builder-heading">Turn the facts into a clear offer</h2>
-          <p>
-            The Agent drafts only public copy from the facts below. You still control dates, price,
-            deposit, amenities, and publication.
-          </p>
-          <ul className="builder-rules">
-            <li>
-              <Check size={15} /> Exact address stays private
-            </li>
-            <li>
-              <Check size={15} /> Nothing publishes without confirmation
-            </li>
-            <li>
-              <Check size={15} /> Approval threshold is stored policy
-            </li>
-          </ul>
+          <BoundaryNote icon={<LockKeyhole size={18} />}>
+            Exact address and access details stay private. The hackathon flow uses a public
+            approximate area only.
+          </BoundaryNote>
         </div>
 
-        <form
-          className="listing-form"
-          onSubmit={(event) => void props.onPrepareListingDraft(event)}
-        >
+        <form className="nook-form" onSubmit={(event) => void onSubmit(event)}>
           <div className="field-row">
-            <label className="field">
-              <span>Property type</span>
+            <Field label="City">
               <input
                 required
-                value={props.listingDraft.propertyType}
+                value={draft.city}
                 onChange={(event) =>
-                  props.setListingDraft((current) => ({
-                    ...current,
-                    propertyType: event.target.value,
-                  }))
+                  setDraft((current) => ({ ...current, city: event.target.value }))
                 }
               />
-            </label>
-            <label className="field field-grow">
-              <span>Public highlights · comma separated</span>
+            </Field>
+            <Field label="Neighborhood">
               <input
                 required
-                value={props.listingDraft.highlights}
+                value={draft.neighborhood}
                 onChange={(event) =>
-                  props.setListingDraft((current) => ({
-                    ...current,
-                    highlights: event.target.value,
-                  }))
+                  setDraft((current) => ({ ...current, neighborhood: event.target.value }))
                 }
               />
-            </label>
+            </Field>
           </div>
-
-          <div className="field-row">
-            <label className="field field-grow">
-              <span>Listing title</span>
-              <input
-                required
-                value={props.listingDraft.title}
-                onChange={(event) =>
-                  props.setListingDraft((current) => ({ ...current, title: event.target.value }))
-                }
-              />
-            </label>
-            <label className="field">
-              <span>Neighborhood</span>
-              <input
-                required
-                value={props.listingDraft.neighborhood}
-                onChange={(event) =>
-                  props.setListingDraft((current) => ({
-                    ...current,
-                    neighborhood: event.target.value,
-                  }))
-                }
-              />
-            </label>
-          </div>
-
-          <label className="field field-wide">
-            <span>Description</span>
+          <Field label="Property type">
+            <input
+              required
+              value={draft.propertyType}
+              onChange={(event) =>
+                setDraft((current) => ({ ...current, propertyType: event.target.value }))
+              }
+            />
+          </Field>
+          <Field label="Confirmed highlights · comma separated">
             <textarea
               required
               rows={3}
-              value={props.listingDraft.description}
+              value={draft.highlights}
               onChange={(event) =>
-                props.setListingDraft((current) => ({
-                  ...current,
-                  description: event.target.value,
-                }))
+                setDraft((current) => ({ ...current, highlights: event.target.value }))
               }
             />
-          </label>
-
-          <div className="field-row three-columns">
-            <label className="field">
-              <span>Nightly · test units</span>
-              <input
-                inputMode="numeric"
-                required
-                value={props.listingDraft.nightlyRateAtomic}
-                onChange={(event) =>
-                  props.setListingDraft((current) => ({
-                    ...current,
-                    nightlyRateAtomic: event.target.value,
-                  }))
-                }
-              />
-            </label>
-            <label className="field">
-              <span>Base deposit</span>
-              <input
-                inputMode="numeric"
-                required
-                value={props.listingDraft.baseDepositAtomic}
-                onChange={(event) =>
-                  props.setListingDraft((current) => ({
-                    ...current,
-                    baseDepositAtomic: event.target.value,
-                  }))
-                }
-              />
-            </label>
-            <label className="field">
-              <span>Max guests</span>
-              <input
-                min="1"
-                required
-                type="number"
-                value={props.listingDraft.maxGuests}
-                onChange={(event) =>
-                  props.setListingDraft((current) => ({
-                    ...current,
-                    maxGuests: Number(event.target.value),
-                  }))
-                }
-              />
-            </label>
-          </div>
-
-          <div className="field-row">
-            <label className="field">
-              <span>Available from</span>
-              <input
-                required
-                type="date"
-                value={props.listingDraft.checkIn}
-                onChange={(event) =>
-                  props.setListingDraft((current) => ({
-                    ...current,
-                    checkIn: event.target.value,
-                  }))
-                }
-              />
-            </label>
-            <label className="field">
-              <span>Available until</span>
-              <input
-                required
-                type="date"
-                value={props.listingDraft.checkOut}
-                onChange={(event) =>
-                  props.setListingDraft((current) => ({
-                    ...current,
-                    checkOut: event.target.value,
-                  }))
-                }
-              />
-            </label>
-          </div>
-
-          <label className="field field-wide">
-            <span>Amenities · comma separated</span>
+          </Field>
+          <Field label="Confirmed amenities · comma separated">
             <input
-              value={props.listingDraft.amenities}
+              value={draft.amenities}
               onChange={(event) =>
-                props.setListingDraft((current) => ({
-                  ...current,
-                  amenities: event.target.value,
-                }))
+                setDraft((current) => ({ ...current, amenities: event.target.value }))
               }
             />
-          </label>
-
-          <label className="field field-wide">
-            <span>House rules · comma separated</span>
+          </Field>
+          <Field label="House rules · comma separated">
             <input
-              value={props.listingDraft.houseRules}
+              value={draft.houseRules}
               onChange={(event) =>
-                props.setListingDraft((current) => ({
-                  ...current,
-                  houseRules: event.target.value,
-                }))
+                setDraft((current) => ({ ...current, houseRules: event.target.value }))
               }
             />
-          </label>
-
-          <button className="primary-button" disabled={props.busyAction !== null}>
-            {props.busyAction === 'prepare-listing-draft' ? (
+          </Field>
+          {error && <InlineError error={error} />}
+          <button className="primary-button full-width" disabled={busy}>
+            {busy ? (
               <>
-                <LoaderCircle className="spin" size={17} /> Host Agent is drafting…
+                <LoaderCircle className="spin" size={17} /> Your Host Agent is drafting…
               </>
             ) : (
               <>
@@ -1432,107 +1051,1177 @@ function HostExperience(props: HostExperienceProps) {
               </>
             )}
           </button>
+          <p className="form-footnote">
+            Photos are presentation assets in this UI phase. The Agent receives only the confirmed
+            public facts above.
+          </p>
         </form>
-
-        {props.hostAgentDraft && !props.createdListing && (
-          <article className="agent-draft-review">
-            <div className="draft-preview-top">
-              <span className="draft-status">
-                <Clock3 size={14} /> Host confirmation required
-              </span>
-              <span>{agentExecutionLabel(props.hostAgentDraft.agent)}</span>
-            </div>
-            <h3>Review the Agent proposal</h3>
-            <p>
-              Title and description were placed back into the editable form. Suggested amenities
-              stay unconfirmed until you add them yourself.
-            </p>
-            {props.hostAgentDraft.draft.suggestedAmenities.length > 0 && (
-              <div className="agent-suggestions">
-                <strong>Unconfirmed suggestions</strong>
-                {props.hostAgentDraft.draft.suggestedAmenities.map((amenity) => (
-                  <span key={amenity}>{amenity}</span>
-                ))}
-              </div>
-            )}
-            <button
-              className="primary-button"
-              disabled={props.busyAction !== null}
-              type="button"
-              onClick={() => void props.onCreateListing()}
-            >
-              {props.busyAction === 'create-listing' ? (
-                <>
-                  <LoaderCircle className="spin" size={17} /> Saving reviewable draft…
-                </>
-              ) : (
-                <>
-                  Accept copy and save draft <Check size={17} />
-                </>
-              )}
-            </button>
-          </article>
-        )}
-
-        {props.createdListing && (
-          <article className="draft-preview">
-            <div className="draft-preview-top">
-              <span className="draft-status">
-                {props.createdListing.listing.status === 'published' ? (
-                  <>
-                    <CheckCircle2 size={14} /> Published
-                  </>
-                ) : (
-                  <>
-                    <Clock3 size={14} /> Awaiting Host confirmation
-                  </>
-                )}
-              </span>
-              <span>Agent draft preview</span>
-            </div>
-            <h3>{props.createdListing.listing.title}</h3>
-            <p>{props.createdListing.listing.description}</p>
-            <div className="draft-facts">
-              <span>
-                <MapPin size={14} /> {props.createdListing.listing.neighborhood}
-              </span>
-              <span>
-                <Users size={14} /> Up to {props.createdListing.listing.maxGuests}
-              </span>
-              <span>
-                <Coins size={14} />{' '}
-                {formatAtomicUnits(props.createdListing.listing.nightlyRateAtomic)} / night
-              </span>
-            </div>
-            {props.createdListing.listing.status === 'draft' && (
-              <button
-                className="primary-button"
-                disabled={props.busyAction !== null}
-                type="button"
-                onClick={() => void props.onPublishListing()}
-              >
-                {props.busyAction === 'publish-listing' ? (
-                  <>
-                    <LoaderCircle className="spin" size={17} /> Publishing…
-                  </>
-                ) : (
-                  <>
-                    Confirm and publish <Check size={17} />
-                  </>
-                )}
-              </button>
-            )}
-          </article>
-        )}
-      </section>
-    </>
+      </div>
+    </section>
   );
 }
 
-function ErrorCard({ error }: { error: NookApiError }) {
+function HostReviewScreen({
+  agentDraft,
+  draft,
+  onAddAmenity,
+  onBack,
+  onContinue,
+  setDraft,
+}: {
+  agentDraft: HostAgentDraftResult;
+  draft: typeof initialListingDraft;
+  onAddAmenity: (amenity: string) => void;
+  onBack: () => void;
+  onContinue: () => void;
+  setDraft: React.Dispatch<React.SetStateAction<typeof initialListingDraft>>;
+}) {
+  const amenities = draft.amenities
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+
   return (
-    <div className="error-card" role="alert">
-      <AlertTriangle size={20} />
+    <section className="workspace-page review-page">
+      <PageTop
+        eyebrow="Host Agent · Review"
+        onBack={onBack}
+        subtitle="Edit anything that doesn’t feel right. Suggested amenities remain unconfirmed until you add them."
+        title="Your Agent put this together."
+      />
+
+      <div className="review-layout">
+        <div className="listing-photo-card">
+          <img alt="Sunlit Graça apartment with a work desk" src={LISTING_IMAGES[2]} />
+          <div className="photo-dots">
+            <span className="active" />
+            <span />
+            <span />
+          </div>
+        </div>
+
+        <article className="draft-editor">
+          <div className="draft-meta">
+            <span className="agent-pill">
+              <Sparkles size={13} /> {agentExecutionLabel(agentDraft.agent)}
+            </span>
+            <span className="review-required">
+              <Clock3 size={13} /> Host review required
+            </span>
+          </div>
+          <Field label="Listing title">
+            <input
+              value={draft.title}
+              onChange={(event) =>
+                setDraft((current) => ({ ...current, title: event.target.value }))
+              }
+            />
+          </Field>
+          <Field label="Description">
+            <textarea
+              rows={5}
+              value={draft.description}
+              onChange={(event) =>
+                setDraft((current) => ({ ...current, description: event.target.value }))
+              }
+            />
+          </Field>
+          <div className="amenity-block">
+            <span className="field-label">Confirmed amenities</span>
+            <div className="chip-row">
+              {amenities.map((amenity) => (
+                <span className="amenity-chip" key={amenity}>
+                  <Check size={12} /> {amenity}
+                </span>
+              ))}
+            </div>
+          </div>
+          {agentDraft.draft.suggestedAmenities.length > 0 && (
+            <div className="suggestion-block">
+              <span className="field-label">Unconfirmed Agent suggestions</span>
+              <div className="chip-row">
+                {agentDraft.draft.suggestedAmenities.map((amenity) => (
+                  <button
+                    className="suggestion-chip"
+                    key={amenity}
+                    type="button"
+                    onClick={() => onAddAmenity(amenity)}
+                  >
+                    + {amenity}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          <button className="primary-button full-width" type="button" onClick={onContinue}>
+            Review dates and terms <ArrowRight size={17} />
+          </button>
+        </article>
+      </div>
+    </section>
+  );
+}
+
+function HostTermsScreen({
+  busyAction,
+  createdListing,
+  draft,
+  error,
+  onBack,
+  onCreate,
+  onPublish,
+  setDraft,
+}: {
+  busyAction: BusyAction;
+  createdListing: ListingDetail | null;
+  draft: typeof initialListingDraft;
+  error: NookApiError | null;
+  onBack: () => void;
+  onCreate: () => Promise<void>;
+  onPublish: () => Promise<void>;
+  setDraft: React.Dispatch<React.SetStateAction<typeof initialListingDraft>>;
+}) {
+  return (
+    <section className="workspace-page terms-page">
+      <PageTop
+        eyebrow="Host · Terms"
+        onBack={onBack}
+        subtitle="Availability, price, deposit, and approval stay under your control—not the Agent’s."
+        title="You set the terms."
+      />
+      <div className="terms-layout">
+        <div className="terms-card">
+          <h2>When is your place available?</h2>
+          <div className="field-row">
+            <Field label="Available from">
+              <input
+                required
+                type="date"
+                value={draft.checkIn}
+                onChange={(event) =>
+                  setDraft((current) => ({ ...current, checkIn: event.target.value }))
+                }
+              />
+            </Field>
+            <Field label="Available until">
+              <input
+                required
+                type="date"
+                value={draft.checkOut}
+                onChange={(event) =>
+                  setDraft((current) => ({ ...current, checkOut: event.target.value }))
+                }
+              />
+            </Field>
+          </div>
+          <div className="field-row">
+            <Field label="Nightly amount · Testnet units">
+              <input
+                inputMode="numeric"
+                value={draft.nightlyRateAtomic}
+                onChange={(event) =>
+                  setDraft((current) => ({
+                    ...current,
+                    nightlyRateAtomic: event.target.value,
+                  }))
+                }
+              />
+            </Field>
+            <Field label="Base refundable deposit">
+              <input
+                inputMode="numeric"
+                value={draft.baseDepositAtomic}
+                onChange={(event) =>
+                  setDraft((current) => ({
+                    ...current,
+                    baseDepositAtomic: event.target.value,
+                  }))
+                }
+              />
+            </Field>
+          </div>
+          <Field label="Maximum guests">
+            <input
+              min="1"
+              type="number"
+              value={draft.maxGuests}
+              onChange={(event) =>
+                setDraft((current) => ({
+                  ...current,
+                  maxGuests: Number(event.target.value),
+                }))
+              }
+            />
+          </Field>
+        </div>
+
+        <aside className="policy-card">
+          <span className="policy-icon">
+            <ShieldCheck size={24} />
+          </span>
+          <p className="flow-eyebrow">Approval policy</p>
+          <h2>Automatic for Silver+</h2>
+          <p>
+            Experienced Guests may qualify automatically. Newcomers receive a fair Host review
+            path—not a rejection.
+          </p>
+          <dl>
+            <div>
+              <dt>Published nightly amount</dt>
+              <dd>{formatAtomicUnits(draft.nightlyRateAtomic)} test units</dd>
+            </div>
+            <div>
+              <dt>Settlement network</dt>
+              <dd>Hedera Testnet</dd>
+            </div>
+            <div>
+              <dt>Stay length</dt>
+              <dd>3–90 nights enforced</dd>
+            </div>
+          </dl>
+        </aside>
+      </div>
+
+      {error && <InlineError error={error} />}
+
+      {!createdListing ? (
+        <button
+          className="primary-button centered-action"
+          disabled={busyAction !== null}
+          type="button"
+          onClick={() => void onCreate()}
+        >
+          {busyAction === 'create-listing' ? (
+            <>
+              <LoaderCircle className="spin" size={17} /> Saving reviewable draft…
+            </>
+          ) : (
+            <>
+              Save Listing draft <ArrowRight size={17} />
+            </>
+          )}
+        </button>
+      ) : (
+        <div className="publish-confirmation">
+          <CheckCircle2 size={22} />
+          <div>
+            <strong>Reviewable Listing draft saved.</strong>
+            <p>Nothing is public until you confirm publication.</p>
+          </div>
+          <button
+            className="primary-button"
+            disabled={busyAction !== null}
+            type="button"
+            onClick={() => void onPublish()}
+          >
+            {busyAction === 'publish-listing' ? (
+              <>
+                <LoaderCircle className="spin" size={17} /> Publishing…
+              </>
+            ) : (
+              <>
+                Confirm and publish <Check size={17} />
+              </>
+            )}
+          </button>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function ListedScreen({
+  listing,
+  onGuestView,
+}: {
+  listing: ListingDetail | null;
+  onGuestView: () => void;
+}) {
+  return (
+    <section className="success-page">
+      <SuccessMark />
+      <p className="flow-eyebrow">Host flow complete</p>
+      <h1>Your place is listed.</h1>
+      <p>Guests can now find it for the dates you made available.</p>
+      <article className="listed-card">
+        <img alt="Sunlit Graça apartment with a balcony" src={LISTING_IMAGES[2]} />
+        <div>
+          <h2>{listing?.listing.title ?? 'Your Graça nook'}</h2>
+          <p>
+            {formatDate(initialListingDraft.checkIn)} – {formatDate(initialListingDraft.checkOut)} ·{' '}
+            {formatAtomicUnits(initialListingDraft.nightlyRateAtomic)} test units / night
+          </p>
+          <span className="live-badge">
+            <span /> Published
+          </span>
+        </div>
+      </article>
+      <button className="primary-button" type="button" onClick={onGuestView}>
+        Continue as a Guest <ArrowRight size={17} />
+      </button>
+    </section>
+  );
+}
+
+function GuestSearchScreen({
+  agentSearch,
+  busy,
+  error,
+  guestKey,
+  guestQuery,
+  onBack,
+  onGuestChange,
+  onQueryChange,
+  onSubmit,
+}: {
+  agentSearch: GuestAgentSearchResult | null;
+  busy: boolean;
+  error: NookApiError | null;
+  guestKey: DemoGuestKey;
+  guestQuery: string;
+  onBack: () => void;
+  onGuestChange: (guestKey: DemoGuestKey) => void;
+  onQueryChange: (value: string) => void;
+  onSubmit: (event: FormEvent) => Promise<void>;
+}) {
+  const selected = DEMO_PROFILES[guestKey];
+
+  return (
+    <section className="workspace-page search-page">
+      <PageTop
+        eyebrow="Guest Agent · Search"
+        onBack={onBack}
+        subtitle="Describe the stay naturally. The Agent interprets your request; Nook applies the real availability and price filters."
+        title="Where to?"
+      />
+
+      <div className="guest-profile-switch">
+        <div>
+          <span className="field-label">Demo Rental Reputation profile</span>
+          <p>This is seeded UI data until the HCS reputation projection is built.</p>
+        </div>
+        <div className="profile-options">
+          {(['experiencedGuest', 'newcomerGuest'] as const).map((key) => {
+            const guest = DEMO_PROFILES[key];
+            return (
+              <button
+                className={guestKey === key ? 'selected' : ''}
+                key={key}
+                type="button"
+                onClick={() => onGuestChange(key)}
+              >
+                <span className="avatar">{guest.name.slice(0, 1)}</span>
+                <span>
+                  <strong>{guest.name}</strong>
+                  <small>{guest.reputationLabel}</small>
+                </span>
+                {guestKey === key && <Check size={14} />}
+              </button>
+            );
+          })}
+        </div>
+        <div className={`reputation-preview ${selected.tier}`}>
+          <BedDouble size={19} />
+          <div>
+            <strong>{selected.reputationLabel}</strong>
+            <span>Demo Rental Reputation · not live sponsor evidence</span>
+          </div>
+        </div>
+      </div>
+
+      <form className="agent-search-card" onSubmit={(event) => void onSubmit(event)}>
+        <span className="agent-orbit">
+          <Sparkles size={22} />
+        </span>
+        <label htmlFor="guest-query">Ask your Guest Agent</label>
+        <textarea
+          id="guest-query"
+          required
+          rows={5}
+          value={guestQuery}
+          onChange={(event) => onQueryChange(event.target.value)}
+        />
+        <div className="query-hints">
+          <span>City</span>
+          <span>Dates</span>
+          <span>Guests</span>
+          <span>Budget</span>
+          <span>Must-haves</span>
+        </div>
+        {agentSearch?.status === 'needs_clarification' && (
+          <div className="clarification">
+            <Sparkles size={17} />
+            <p>{agentSearch.question}</p>
+          </div>
+        )}
+        {error && <InlineError error={error} />}
+        <button className="primary-button full-width" disabled={busy}>
+          {busy ? (
+            <>
+              <LoaderCircle className="spin" size={17} /> Your Agent is looking…
+            </>
+          ) : (
+            <>
+              Find available nooks <Search size={17} />
+            </>
+          )}
+        </button>
+      </form>
+    </section>
+  );
+}
+
+function ResultsScreen({
+  agentSearch,
+  busy,
+  guestKey,
+  listings,
+  onBack,
+  onOpen,
+  search,
+  selectedListing,
+}: {
+  agentSearch: GuestAgentSearchResult | null;
+  busy: boolean;
+  guestKey: DemoGuestKey;
+  listings: Listing[];
+  onBack: () => void;
+  onOpen: (listing: Listing) => Promise<void>;
+  search: SearchInput;
+  selectedListing: Listing | null;
+}) {
+  const guest = DEMO_PROFILES[guestKey];
+
+  return (
+    <section className="workspace-page results-page">
+      <button className="back-button" type="button" onClick={onBack}>
+        <ArrowLeft size={16} /> Change search
+      </button>
+      <div className="results-heading">
+        <div>
+          <p className="flow-eyebrow">
+            {search.city} · {formatDate(search.checkIn)}–{formatDate(search.checkOut)}
+          </p>
+          <h1>
+            {listings.length > 0
+              ? `Your Agent found ${listings.length} ${listings.length === 1 ? 'nook' : 'nooks'}.`
+              : 'No valid nooks yet.'}
+          </h1>
+          <p>
+            Database-filtered for dates, occupancy, budget, and must-haves—then ranked by your
+            Agent.
+          </p>
+        </div>
+        <div className="approval-path-card">
+          <span className="demo-tag">Demo reputation</span>
+          <strong>{guest.reputationLabel}</strong>
+          <small>
+            {guest.tier === 'silver'
+              ? 'Eligible for automatic approval where the Host enables it'
+              : 'Fair Host review path'}
+          </small>
+        </div>
+      </div>
+
+      {agentSearch?.status === 'ready' && (
+        <div className="agent-run-strip">
+          <Sparkles size={15} />
+          <span>{agentExecutionLabel(agentSearch.agent.interpretation)}</span>
+          {agentSearch.agent.ranking && (
+            <span>Ranking: {agentExecutionLabel(agentSearch.agent.ranking)}</span>
+          )}
+        </div>
+      )}
+
+      {listings.length === 0 ? (
+        <EmptyState
+          icon={<CalendarDays size={26} />}
+          text="Try different dates, fewer must-have amenities, or a wider budget."
+          title="Nothing matches those dates"
+        />
+      ) : (
+        <div className="marketplace-grid">
+          {listings.map((listing, index) => {
+            const recommendation =
+              agentSearch?.status === 'ready'
+                ? agentSearch.items.find((item) => item.listing.id === listing.id)
+                : undefined;
+
+            return (
+              <article className="market-card" key={listing.id}>
+                <div className="market-image">
+                  <img
+                    alt={`${listing.title} in ${listing.neighborhood}`}
+                    src={imageForListing(listing, index)}
+                  />
+                  <span className="available-chip">
+                    <Check size={12} /> Dates available
+                  </span>
+                </div>
+                <div className="market-content">
+                  <p className="listing-area">
+                    <MapPin size={13} /> {listing.neighborhood}, {listing.city}
+                  </p>
+                  <h2>{listing.title}</h2>
+                  <div className="chip-row">
+                    {listing.amenities.slice(0, 4).map((amenity) => (
+                      <span className="amenity-chip" key={amenity}>
+                        {amenity}
+                      </span>
+                    ))}
+                  </div>
+                  {recommendation && (
+                    <div className="match-note">
+                      <Sparkles size={15} />
+                      <div>
+                        <strong>Why it matches</strong>
+                        <p>{recommendation.summary}</p>
+                      </div>
+                    </div>
+                  )}
+                  <div className="market-footer">
+                    <div>
+                      <strong>{formatAtomicUnits(listing.nightlyRateAtomic)}</strong>
+                      <span> test units / night</span>
+                    </div>
+                    <button
+                      className="secondary-button"
+                      disabled={busy}
+                      type="button"
+                      onClick={() => void onOpen(listing)}
+                    >
+                      {busy && selectedListing?.id === listing.id ? (
+                        <LoaderCircle className="spin" size={16} />
+                      ) : (
+                        <>
+                          View nook <ArrowRight size={15} />
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function DetailScreen({
+  busy,
+  error,
+  guestKey,
+  listing,
+  onBack,
+  onReserve,
+  quote,
+}: {
+  busy: boolean;
+  error: NookApiError | null;
+  guestKey: DemoGuestKey;
+  listing: Listing;
+  onBack: () => void;
+  onReserve: () => Promise<void>;
+  quote: BookingQuote;
+}) {
+  const guest = DEMO_PROFILES[guestKey];
+  const quoteExpired = Date.parse(quote.expiresAt) <= Date.now();
+
+  return (
+    <section className="workspace-page detail-page">
+      <button className="back-button" type="button" onClick={onBack}>
+        <ArrowLeft size={16} /> Back to results
+      </button>
+
+      <div className="detail-grid">
+        <div className="detail-main">
+          <div className="detail-photo">
+            <img
+              alt={`${listing.title} in ${listing.neighborhood}`}
+              src={imageForListing(listing)}
+            />
+            <span>
+              <MapPin size={14} /> Approximate area · {listing.neighborhood}
+            </span>
+          </div>
+          <article className="detail-copy surface-card">
+            <p className="flow-eyebrow">{listing.city} · 3–90 night stays</p>
+            <h1>{listing.title}</h1>
+            <p>{listing.description}</p>
+            <h2>Amenities</h2>
+            <div className="chip-row">
+              {listing.amenities.map((amenity) => (
+                <span className="amenity-chip" key={amenity}>
+                  <Check size={12} /> {amenity}
+                </span>
+              ))}
+            </div>
+            <h2>House rules</h2>
+            <ul className="rule-list">
+              {listing.houseRules.map((rule) => (
+                <li key={rule}>{rule}</li>
+              ))}
+            </ul>
+          </article>
+        </div>
+
+        <aside className="booking-sidebar">
+          <div className="quote-card">
+            <div className="quote-top">
+              <span>Exact Booking Quote</span>
+              <span className={quoteExpired ? 'expired' : ''}>
+                <Clock3 size={13} /> {quoteExpired ? 'Expired' : '15 min'}
+              </span>
+            </div>
+            <div className="price-display">
+              <strong>{formatAtomicUnits(quote.nightlyRateAtomic)}</strong>
+              <span>test units / night</span>
+            </div>
+            <dl className="quote-lines">
+              <div>
+                <dt>{quote.nights} nights</dt>
+                <dd>{formatAtomicUnits(quote.staySubtotalAtomic)}</dd>
+              </div>
+              <div>
+                <dt>Refundable deposit</dt>
+                <dd>{formatAtomicUnits(quote.quotedDepositAtomic)}</dd>
+              </div>
+              <div>
+                <dt>Total due</dt>
+                <dd>{formatAtomicUnits(quote.totalDueAtomic)}</dd>
+              </div>
+            </dl>
+            <div className="reputation-quote">
+              <span className="demo-tag">Demo Rental Reputation</span>
+              <strong>{guest.reputationLabel}</strong>
+              <p>
+                {quote.reputationTier === 'newcomer'
+                  ? 'This quote uses the Newcomer deposit and Host review path.'
+                  : 'This quote uses the stored Silver-tier policy.'}
+              </p>
+            </div>
+            {error && <InlineError error={error} />}
+            <button
+              className="primary-button full-width"
+              disabled={busy || quoteExpired}
+              type="button"
+              onClick={() => void onReserve()}
+            >
+              {busy ? (
+                <>
+                  <LoaderCircle className="spin" size={17} /> Protecting your dates…
+                </>
+              ) : (
+                <>
+                  Request this nook <ArrowRight size={17} />
+                </>
+              )}
+            </button>
+            <p className="form-footnote">
+              World and Agent0 are verified before dates are held. Hedera settlement happens only
+              after approval.
+            </p>
+          </div>
+
+          <div className="assurance-list">
+            <AssuranceRow
+              icon={<ShieldCheck size={18} />}
+              label="World"
+              text="Human-backed authorization at hold"
+            />
+            <AssuranceRow
+              icon={<Network size={18} />}
+              label="The Graph"
+              text="Live Agent0 capability check"
+            />
+            <AssuranceRow
+              icon={<Coins size={18} />}
+              label="Hedera"
+              text="Testnet deposit after approval"
+            />
+          </div>
+        </aside>
+      </div>
+    </section>
+  );
+}
+
+function BookingScreen({
+  busyAction,
+  deposit,
+  error,
+  guestKey,
+  onBack,
+  onFund,
+  onHostReview,
+  onReconcile,
+  reservation,
+}: {
+  busyAction: BusyAction;
+  deposit: DepositResult | null;
+  error: NookApiError | null;
+  guestKey: DemoGuestKey;
+  onBack: () => void;
+  onFund: () => Promise<void>;
+  onHostReview: () => void;
+  onReconcile: () => Promise<void>;
+  reservation: ReservationResult;
+}) {
+  const manual = reservation.booking.status === 'approval_pending';
+  const rejected = reservation.booking.status === 'rejected';
+  const guest = DEMO_PROFILES[guestKey];
+  const operationPending =
+    deposit &&
+    ['pending', 'reserved', 'submitted', 'reconciling'].includes(deposit.operation.status);
+
+  return (
+    <section className="status-page">
+      <button className="back-button" type="button" onClick={onBack}>
+        <ArrowLeft size={16} /> Back to Listing
+      </button>
+
+      <div className={`status-hero ${rejected ? 'rejected' : ''}`}>
+        {rejected ? (
+          <XCircle size={34} />
+        ) : manual ? (
+          <Clock3 size={34} />
+        ) : (
+          <CheckCircle2 size={34} />
+        )}
+        <p className="flow-eyebrow">Reservation Hold created</p>
+        <h1>
+          {rejected
+            ? 'Request declined.'
+            : manual
+              ? 'Your Host will review this.'
+              : 'Approved—your deposit is next.'}
+        </h1>
+        <p>
+          {rejected
+            ? 'The hold was released and the dates are available again.'
+            : manual
+              ? 'The dates are protected while the Host reviews this Newcomer request.'
+              : 'The stored Host policy approved this request. Fund the exact Testnet deposit to confirm.'}
+        </p>
+      </div>
+
+      <div className="status-layout">
+        <article className="status-card">
+          <h2>What just happened</h2>
+          <ol className="flow-timeline">
+            <StatusStep complete label="World authorization" text="Human-backed Agent confirmed" />
+            <StatusStep complete label="Agent0 signal" text="Active booking capability confirmed" />
+            <StatusStep complete label="Dates protected" text="Atomic Reservation Hold created" />
+            <StatusStep
+              active={!manual && !rejected}
+              complete={rejected}
+              label="Host policy"
+              text={
+                manual
+                  ? 'Host review required'
+                  : rejected
+                    ? 'Request closed'
+                    : 'Automatic approval passed'
+              }
+            />
+            <StatusStep
+              active={Boolean(operationPending)}
+              label="Hedera deposit"
+              text={deposit ? `Operation ${deposit.operation.status}` : 'Runs only after approval'}
+            />
+          </ol>
+        </article>
+
+        <aside className="evidence-card">
+          <p className="flow-eyebrow">Evidence returned by the API</p>
+          <h2>Separate, verifiable signals</h2>
+          <EvidenceRow
+            live={reservation.authorization?.humanBacked === true}
+            label="World"
+            value={
+              reservation.authorization?.humanBacked ? 'Human-backed this hold' : 'No live evidence'
+            }
+          />
+          <EvidenceRow
+            live={reservation.onchainSignal?.capabilityPresent === true}
+            label="The Graph"
+            value={
+              reservation.onchainSignal?.capabilityPresent
+                ? `${reservation.onchainSignal.network} · capability active`
+                : 'No live evidence'
+            }
+          />
+          <EvidenceRow demo label="Rental Reputation" value={guest.reputationLabel} />
+          <EvidenceRow
+            live={deposit?.operation.status === 'confirmed'}
+            label="Hedera"
+            value={deposit ? `Operation ${deposit.operation.status}` : 'Awaiting deposit'}
+          />
+        </aside>
+      </div>
+
+      {error && <InlineError error={error} />}
+
+      <div className="status-actions">
+        {manual && (
+          <button className="primary-button" type="button" onClick={onHostReview}>
+            Open Host review <ArrowRight size={17} />
+          </button>
+        )}
+        {reservation.booking.status === 'awaiting_deposit' && !deposit && (
+          <button
+            className="primary-button"
+            disabled={busyAction !== null}
+            type="button"
+            onClick={() => void onFund()}
+          >
+            {busyAction === 'deposit' ? (
+              <>
+                <LoaderCircle className="spin" size={17} /> Submitting Testnet deposit…
+              </>
+            ) : (
+              <>
+                Fund Testnet deposit <Coins size={17} />
+              </>
+            )}
+          </button>
+        )}
+        {operationPending && (
+          <button
+            className="secondary-button"
+            disabled={busyAction !== null}
+            type="button"
+            onClick={() => void onReconcile()}
+          >
+            {busyAction === 'reconcile' ? (
+              <>
+                <LoaderCircle className="spin" size={16} /> Checking Mirror Node…
+              </>
+            ) : (
+              <>
+                Reconcile with Mirror Node <RefreshCw size={15} />
+              </>
+            )}
+          </button>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function HostDecisionScreen({
+  busy,
+  onBack,
+  onDecision,
+  reservation,
+}: {
+  busy: boolean;
+  onBack: () => void;
+  onDecision: (decision: 'approved' | 'rejected') => Promise<void>;
+  reservation: ReservationResult;
+}) {
+  const decided = reservation.bookingRequest.status !== 'pending';
+
+  return (
+    <section className="workspace-page host-decision-page">
+      <PageTop
+        eyebrow="Host · Review queue"
+        onBack={onBack}
+        subtitle="Missing rental history is not negative evidence. Review the exact request and decide explicitly."
+        title="Jo would like to stay."
+      />
+      <article className="decision-card">
+        <div className="decision-person">
+          <span className="avatar large">J</span>
+          <div>
+            <span className="demo-tag">Demo Rental Reputation</span>
+            <h2>Newcomer</h2>
+            <p>No verified Nook stays yet · fair Host review path</p>
+          </div>
+        </div>
+        <dl className="decision-facts">
+          <div>
+            <dt>Dates</dt>
+            <dd>
+              {formatDate(reservation.hold.checkIn)}–{formatDate(reservation.hold.checkOut)}
+            </dd>
+          </div>
+          <div>
+            <dt>Length</dt>
+            <dd>{reservation.hold.nights} nights</dd>
+          </div>
+          <div>
+            <dt>Deposit</dt>
+            <dd>{formatAtomicUnits(reservation.booking.depositAmountAtomic)} test units</dd>
+          </div>
+          <div>
+            <dt>Date protection</dt>
+            <dd>
+              {reservation.hold.status === 'active' ? 'Hold active' : reservation.hold.status}
+            </dd>
+          </div>
+        </dl>
+        <BoundaryNote icon={<ShieldCheck size={18} />}>
+          World and Agent0 already authorized the request. They do not substitute for rental history
+          or make this Host decision.
+        </BoundaryNote>
+
+        {decided ? (
+          <div className="decision-result">
+            {reservation.bookingRequest.status === 'approved' ? (
+              <CheckCircle2 size={24} />
+            ) : (
+              <XCircle size={24} />
+            )}
+            <div>
+              <strong>
+                Request {reservation.bookingRequest.status === 'approved' ? 'approved' : 'declined'}
+              </strong>
+              <p>The Guest timeline is updated and the action is recorded.</p>
+            </div>
+            <button className="secondary-button" type="button" onClick={onBack}>
+              Return to Guest status
+            </button>
+          </div>
+        ) : (
+          <div className="decision-actions">
+            <button
+              className="danger-button"
+              disabled={busy}
+              type="button"
+              onClick={() => void onDecision('rejected')}
+            >
+              Decline
+            </button>
+            <button
+              className="primary-button"
+              disabled={busy}
+              type="button"
+              onClick={() => void onDecision('approved')}
+            >
+              {busy ? (
+                <>
+                  <LoaderCircle className="spin" size={17} /> Saving decision…
+                </>
+              ) : (
+                <>
+                  Approve request <Check size={17} />
+                </>
+              )}
+            </button>
+          </div>
+        )}
+      </article>
+    </section>
+  );
+}
+
+function ConfirmedScreen({
+  deposit,
+  listing,
+  onCheckIn,
+  reservation,
+}: {
+  deposit: DepositResult;
+  listing: Listing | null;
+  onCheckIn: () => void;
+  reservation: ReservationResult;
+}) {
+  return (
+    <section className="success-page confirmed-page">
+      <SuccessMark />
+      <p className="flow-eyebrow">Booking confirmed</p>
+      <h1>You found your nook.</h1>
+      <p>
+        {listing?.neighborhood ?? 'Lisbon'} · {formatDate(reservation.hold.checkIn)}–
+        {formatDate(reservation.hold.checkOut)}
+      </p>
+
+      <article className="confirmation-card">
+        <div className="confirmation-image">
+          <img alt={listing?.title ?? 'Your Lisbon nook'} src={imageForListing(listing)} />
+        </div>
+        <div className="confirmation-details">
+          <div>
+            <span>Testnet deposit funded</span>
+            <strong>{formatAtomicUnits(deposit.escrow.amountAtomic)} test units</strong>
+            <small>Token {deposit.escrow.tokenId} · no real monetary value</small>
+          </div>
+          <div>
+            <span>Reservation Hold</span>
+            <strong>Converted into a Booking</strong>
+            <small>{reservation.booking.id.slice(0, 18)}…</small>
+          </div>
+          <div>
+            <span>Hedera evidence</span>
+            <strong>
+              {deposit.evidence.status === 'confirmed'
+                ? `HCS sequence #${deposit.evidence.sequenceNumber}`
+                : 'Evidence pending'}
+            </strong>
+            <div className="evidence-links">
+              {deposit.operation.transactionUrl && (
+                <a href={deposit.operation.transactionUrl} rel="noreferrer" target="_blank">
+                  HTS transaction <ExternalLink size={13} />
+                </a>
+              )}
+              {deposit.evidence.status === 'confirmed' && deposit.evidence.topicUrl && (
+                <a href={deposit.evidence.topicUrl} rel="noreferrer" target="_blank">
+                  HCS record <ExternalLink size={13} />
+                </a>
+              )}
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <button className="primary-button" type="button" onClick={onCheckIn}>
+        Preview check-in stage <KeyRound size={17} />
+      </button>
+    </section>
+  );
+}
+
+function CheckInTeaser({ onBack }: { onBack: () => void }) {
+  return (
+    <section className="workspace-page checkin-page">
+      <PageTop
+        eyebrow="Future workflow"
+        onBack={onBack}
+        subtitle="Private access information will be released only to the authorized Guest at the appropriate Booking state."
+        title="Everything you need, before you land."
+      />
+      <div className="checkin-locked">
+        <span className="lock-orb">
+          <LockKeyhole size={30} />
+        </span>
+        <span className="preview-badge">Not implemented in the hackathon baseline</span>
+        <h2>Check-in details stay locked.</h2>
+        <p>
+          Production delivery needs encrypted storage, state-gated release, access auditing, and
+          recovery. The demo never publishes a fake door code or Wi-Fi password.
+        </p>
+        <div className="locked-rows">
+          <span>
+            <KeyRound size={17} /> Entry instructions
+          </span>
+          <span>
+            <WalletCards size={17} /> Arrival confirmation
+          </span>
+          <span>
+            <ShieldCheck size={17} /> Escrow release policy
+          </span>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function PageTop({
+  eyebrow,
+  onBack,
+  subtitle,
+  title,
+}: {
+  eyebrow: string;
+  onBack: () => void;
+  subtitle: string;
+  title: string;
+}) {
+  return (
+    <div className="page-top">
+      <button className="back-button" type="button" onClick={onBack}>
+        <ArrowLeft size={16} /> Back
+      </button>
+      <p className="flow-eyebrow">{eyebrow}</p>
+      <h1>{title}</h1>
+      <p>{subtitle}</p>
+    </div>
+  );
+}
+
+function Field({ children, label }: { children: ReactNode; label: string }) {
+  return (
+    <label className="field">
+      <span className="field-label">{label}</span>
+      {children}
+    </label>
+  );
+}
+
+function AssuranceRow({ icon, label, text }: { icon: ReactNode; label: string; text: string }) {
+  return (
+    <div className="assurance-row">
+      {icon}
+      <div>
+        <strong>{label}</strong>
+        <span>{text}</span>
+      </div>
+    </div>
+  );
+}
+
+function StatusStep({
+  active = false,
+  complete = false,
+  label,
+  text,
+}: {
+  active?: boolean;
+  complete?: boolean;
+  label: string;
+  text: string;
+}) {
+  return (
+    <li className={`${active ? 'active' : ''} ${complete ? 'complete' : ''}`}>
+      <span>{complete ? <Check size={13} /> : active ? <LoaderCircle size={13} /> : null}</span>
+      <div>
+        <strong>{label}</strong>
+        <small>{text}</small>
+      </div>
+    </li>
+  );
+}
+
+function EvidenceRow({
+  demo = false,
+  label,
+  live = false,
+  value,
+}: {
+  demo?: boolean;
+  label: string;
+  live?: boolean;
+  value: string;
+}) {
+  return (
+    <div className="evidence-row">
+      <span className={`evidence-dot ${live ? 'live' : ''} ${demo ? 'demo' : ''}`} />
+      <div>
+        <strong>{label}</strong>
+        <small>{value}</small>
+      </div>
+      <span className={`evidence-state ${live ? 'live' : ''} ${demo ? 'demo' : ''}`}>
+        {demo ? 'Demo' : live ? 'Live' : 'Pending'}
+      </span>
+    </div>
+  );
+}
+
+function SuccessMark() {
+  return (
+    <span className="success-mark">
+      <Check size={34} />
+    </span>
+  );
+}
+
+function InlineError({ error }: { error: NookApiError }) {
+  return (
+    <div className="inline-error" role="alert">
+      <AlertTriangle size={18} />
       <div>
         <strong>We couldn’t complete that step.</strong>
         <p>{friendlyError(error)}</p>
@@ -1542,91 +2231,12 @@ function ErrorCard({ error }: { error: NookApiError }) {
   );
 }
 
-function EmptyState({ icon, title, text }: { icon: ReactNode; title: string; text: string }) {
+function EmptyState({ icon, text, title }: { icon: ReactNode; text: string; title: string }) {
   return (
     <div className="empty-state">
       <span>{icon}</span>
-      <h3>{title}</h3>
+      <h2>{title}</h2>
       <p>{text}</p>
     </div>
-  );
-}
-
-function EvidencePanel({
-  deposit,
-  reservation,
-}: {
-  deposit: DepositResult | null;
-  reservation: ReservationResult | null;
-}) {
-  const hederaLive = deposit?.operation.status === 'confirmed';
-  const worldVerified = reservation?.authorization?.humanBacked === true;
-  const graphVerified = reservation?.onchainSignal?.capabilityPresent === true;
-  const evidence = [
-    {
-      icon: <Database size={18} />,
-      name: 'Marketplace core',
-      status: 'Live now',
-      tone: 'live',
-      detail: 'Supabase persistence, exact quotes, atomic holds, Host policy',
-    },
-    {
-      icon: <Globe2 size={18} />,
-      name: 'World',
-      status: worldVerified ? 'Verified this hold' : 'AgentKit-ready',
-      tone: worldVerified ? 'live' : 'ready',
-      detail:
-        'AgentKit challenge, signed-request verification, AgentBook lookup, nonce replay defense, and one-active-hold limit',
-    },
-    {
-      icon: <Network size={18} />,
-      name: 'The Graph',
-      status: graphVerified ? 'Live this hold' : 'Checked at hold',
-      tone: graphVerified ? 'live' : 'ready',
-      detail:
-        graphVerified && reservation?.onchainSignal
-          ? `Agent0 on ${reservation.onchainSignal.network}; active registration and ${reservation.onchainSignal.requiredCapability}`
-          : 'Server-side Agent0 registration, signing-wallet binding, and booking-capability check',
-    },
-    {
-      icon: <Coins size={18} />,
-      name: 'Hedera',
-      status: hederaLive ? 'Live Testnet' : 'Testnet-ready',
-      tone: hederaLive ? 'live' : 'ready',
-      detail:
-        hederaLive && deposit
-          ? `${formatAtomicUnits(deposit.escrow.amountAtomic)} test units funded; HCS ${
-              deposit.evidence.status === 'confirmed'
-                ? `#${deposit.evidence.sequenceNumber}`
-                : 'evidence pending'
-            }`
-          : 'Native HTS, Mirror Node, and HCS adapters; live evidence not run yet',
-    },
-  ];
-
-  return (
-    <section className="evidence-section" aria-labelledby="evidence-heading">
-      <div className="section-heading">
-        <div>
-          <span className="step-label">Integration evidence</span>
-          <h2 id="evidence-heading">One clear job for every layer</h2>
-        </div>
-        <p>No visual-only sponsor claims. Planned integrations stay labeled until they work.</p>
-      </div>
-      <div className="evidence-grid">
-        {evidence.map((item) => (
-          <article key={item.name}>
-            <div className="evidence-icon">{item.icon}</div>
-            <div>
-              <div className="evidence-title">
-                <h3>{item.name}</h3>
-                <span className={item.tone}>{item.status}</span>
-              </div>
-              <p>{item.detail}</p>
-            </div>
-          </article>
-        ))}
-      </div>
-    </section>
   );
 }

@@ -172,6 +172,7 @@ function installMarketplaceApi(
   options: { requireWorldAgent?: boolean } = {},
 ) {
   const initialReservation = reservation(mode);
+  vi.stubGlobal('scrollTo', vi.fn());
 
   vi.stubGlobal(
     'fetch',
@@ -348,16 +349,33 @@ afterEach(() => {
 });
 
 describe('Nook marketplace demo', () => {
-  it('shows API readiness and switches between the Guest and Host desks', async () => {
+  async function enterGuestSearch(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(screen.getByRole('button', { name: 'Get started' }));
+    await user.click(screen.getByRole('button', { name: /I’m looking for a place/ }));
+    await user.click(screen.getByRole('button', { name: 'Continue with demo member' }));
+    await user.click(screen.getByRole('button', { name: 'Continue' }));
+    expect(screen.getByRole('heading', { name: 'Where to?' })).toBeTruthy();
+  }
+
+  async function enterHostCreate(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(screen.getByRole('button', { name: 'Get started' }));
+    await user.click(screen.getByRole('button', { name: /I want to rent out my place/ }));
+    await user.click(screen.getByRole('button', { name: 'Continue with demo member' }));
+    await user.click(screen.getByRole('button', { name: 'Continue' }));
+    expect(screen.getByRole('heading', { name: 'Show us your nook.' })).toBeTruthy();
+  }
+
+  it('shows API readiness and the guided role selection', async () => {
     installMarketplaceApi('automatic');
     const user = userEvent.setup();
 
     render(<App />);
 
-    expect(await screen.findByText('Marketplace ready')).toBeTruthy();
-    await user.click(screen.getByRole('button', { name: 'Host desk' }));
-    expect(screen.getByRole('heading', { name: 'Welcome back, Maria.' })).toBeTruthy();
-    expect(screen.getByText('Review queue is clear')).toBeTruthy();
+    expect(await screen.findByText('Live marketplace connected')).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Get started' }));
+    expect(screen.getByRole('heading', { name: 'A familiar welcome.' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /I want to rent out my place/ })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /I’m looking for a place/ })).toBeTruthy();
   });
 
   it('completes automatic approval and Testnet deposit confirmation', async () => {
@@ -365,27 +383,27 @@ describe('Nook marketplace demo', () => {
     const user = userEvent.setup();
 
     render(<App />);
+    await enterGuestSearch(user);
 
-    await user.click(screen.getByRole('button', { name: 'Show available homes' }));
+    await user.click(screen.getByRole('button', { name: 'Find available nooks' }));
     expect(await screen.findByText(listing.title)).toBeTruthy();
     expect(screen.getByText('The best valid work-friendly match.')).toBeTruthy();
 
-    await user.click(screen.getByRole('button', { name: 'View quote' }));
-    expect(await screen.findByRole('heading', { name: 'Review the exact terms' })).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'View nook' }));
+    expect(await screen.findByText('Exact Booking Quote')).toBeTruthy();
 
-    await user.click(screen.getByRole('button', { name: 'Reserve these dates' }));
-    expect(await screen.findByRole('heading', { name: 'Approved—deposit is next' })).toBeTruthy();
-    expect(screen.getByText('Verified this hold')).toBeTruthy();
-    expect(screen.getByText('Live this hold')).toBeTruthy();
-    expect(screen.getByText(/Agent0 on base-sepolia/)).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Request this nook' }));
+    expect(
+      await screen.findByRole('heading', { name: 'Approved—your deposit is next.' }),
+    ).toBeTruthy();
+    expect(screen.getByText('Human-backed this hold')).toBeTruthy();
+    expect(screen.getByText('base-sepolia · capability active')).toBeTruthy();
 
     await user.click(screen.getByRole('button', { name: 'Fund Testnet deposit' }));
-    expect(
-      await screen.findByRole('heading', { name: 'Booking confirmed on Hedera' }),
-    ).toBeTruthy();
-    expect(screen.getByText('Real Testnet evidence')).toBeTruthy();
-    expect(screen.getByRole('link', { name: /HTS transfer/ })).toBeTruthy();
-    expect(screen.getByRole('link', { name: /HCS #14/ })).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'You found your nook.' })).toBeTruthy();
+    expect(screen.getByText('HCS sequence #14')).toBeTruthy();
+    expect(screen.getByRole('link', { name: /HTS transaction/ })).toBeTruthy();
+    expect(screen.getByRole('link', { name: /HCS record/ })).toBeTruthy();
   });
 
   it('hands a Newcomer request to the Host for an explicit decision', async () => {
@@ -393,19 +411,22 @@ describe('Nook marketplace demo', () => {
     const user = userEvent.setup();
 
     render(<App />);
+    await enterGuestSearch(user);
 
     await user.click(screen.getByRole('button', { name: /Jo/ }));
-    await user.click(screen.getByRole('button', { name: 'Show available homes' }));
-    await user.click(await screen.findByRole('button', { name: 'View quote' }));
-    await user.click(await screen.findByRole('button', { name: 'Reserve these dates' }));
+    await user.click(screen.getByRole('button', { name: 'Find available nooks' }));
+    await user.click(await screen.findByRole('button', { name: 'View nook' }));
+    await user.click(await screen.findByRole('button', { name: 'Request this nook' }));
 
-    expect(await screen.findByRole('heading', { name: 'Waiting for Maria' })).toBeTruthy();
+    expect(
+      await screen.findByRole('heading', { name: 'Your Host will review this.' }),
+    ).toBeTruthy();
     await user.click(screen.getByRole('button', { name: 'Open Host review' }));
-    expect(screen.getByRole('heading', { name: 'Jo wants to stay' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Jo would like to stay.' })).toBeTruthy();
 
     await user.click(screen.getByRole('button', { name: 'Approve request' }));
     await waitFor(() => {
-      expect(screen.getByRole('heading', { name: 'Request approved' })).toBeTruthy();
+      expect(screen.getByText('Request approved')).toBeTruthy();
     });
   });
 
@@ -414,14 +435,15 @@ describe('Nook marketplace demo', () => {
     const user = userEvent.setup();
 
     render(<App />);
+    await enterGuestSearch(user);
 
-    await user.click(screen.getByRole('button', { name: 'Show available homes' }));
-    await user.click(await screen.findByRole('button', { name: 'View quote' }));
-    await user.click(await screen.findByRole('button', { name: 'Reserve these dates' }));
+    await user.click(screen.getByRole('button', { name: 'Find available nooks' }));
+    await user.click(await screen.findByRole('button', { name: 'View nook' }));
+    await user.click(await screen.findByRole('button', { name: 'Request this nook' }));
 
     expect(
       await screen.findByText(
-        'A World-verified Guest Agent must authorize this hold. Use the Guest Agent flow, then try again.',
+        'This protected hold needs a World-verified Guest Agent. The visual onboarding preview does not replace the live AgentKit proof.',
       ),
     ).toBeTruthy();
   });
@@ -431,18 +453,22 @@ describe('Nook marketplace demo', () => {
     const user = userEvent.setup();
 
     render(<App />);
+    await enterHostCreate(user);
 
-    await user.click(await screen.findByRole('button', { name: 'Host desk' }));
     await user.click(screen.getByRole('button', { name: 'Ask Host Agent to draft' }));
 
-    expect(await screen.findByRole('heading', { name: 'Review the Agent proposal' })).toBeTruthy();
+    expect(
+      await screen.findByRole('heading', { name: 'Your Agent put this together.' }),
+    ).toBeTruthy();
     expect(screen.getByText('workspace')).toBeTruthy();
     expect(screen.getByText(/Live OpenAI/)).toBeTruthy();
 
-    await user.click(screen.getByRole('button', { name: 'Accept copy and save draft' }));
-    expect(await screen.findByText('Agent-drafted Graça home')).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Review dates and terms' }));
+    await user.click(screen.getByRole('button', { name: 'Save Listing draft' }));
+    expect(await screen.findByText('Reviewable Listing draft saved.')).toBeTruthy();
 
     await user.click(screen.getByRole('button', { name: 'Confirm and publish' }));
-    expect(await screen.findByText('Published')).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'Your place is listed.' })).toBeTruthy();
+    expect(screen.getByText('Published')).toBeTruthy();
   });
 });

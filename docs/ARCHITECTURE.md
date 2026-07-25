@@ -1,7 +1,7 @@
 # Nook.rent architecture
 
-Status: Phase 8 constrained marketplace Agents implemented locally; live OpenAI
-smoke evidence pending
+Status: Phase 8 constrained marketplace Agents and guided demo UI implemented;
+live OpenAI smoke evidence pending
 
 ## Principles
 
@@ -57,11 +57,13 @@ supabase/
 
 ### `apps/web`
 
-Renders public Listings, search, Booking status, Host review, and sponsor
-evidence. It communicates only with the API. The current tracer supports Host
-and Guest demo roles, both approval paths, Listing draft confirmation, and
-explicit operational states. It does not hold provider credentials or make
-financial or authorization decisions.
+Renders a guided Host and Guest journey across onboarding, Listing creation,
+Agent review, search, Listing detail, Booking Quote, Reservation Hold, Host
+review, deposit, and confirmation states. It communicates only with the API.
+The UI includes clearly labeled seeded Rental Reputation profiles while the
+real HCS projection is deferred; it never presents that demo data as live
+sponsor evidence. It does not hold provider credentials or make financial or
+authorization decisions.
 
 ### `apps/api`
 

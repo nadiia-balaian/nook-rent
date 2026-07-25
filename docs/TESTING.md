@@ -85,10 +85,12 @@ Listing publication, search, deterministic quote creation, atomic hold,
 automatic approval, Host review, Host decision, idempotent retry, and
 conflicting-date rejection.
 
-The Phase 4 browser-component suite exercises API readiness, Guest/Host role
-switching, search and quote presentation, automatic approval, Newcomer Host
-review, the explicit Host decision handoff, deposit confirmation, and HTS/HCS
-evidence links.
+The Phase 4 browser-component suite exercises the guided onboarding and role
+selection, Guest search and quote presentation, automatic approval, Newcomer
+Host review, the explicit Host decision handoff, Host Agent
+review-before-publish, deposit confirmation, and HTS/HCS evidence links. Manual
+visual QA additionally covers the desktop and 390px mobile layouts using the
+real local API with OpenAI disabled so deterministic fallback is visible.
 
 The Phase 5 API integration path uses controlled Hedera fakes with real
 PostgreSQL repositories to prove the full local flow through confirmed Booking,
