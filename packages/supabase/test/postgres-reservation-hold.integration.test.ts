@@ -5,6 +5,7 @@ import { createPostgresClient, type PostgresClient } from '../src/client.js';
 import { applyMigrations } from '../src/migrations.js';
 import {
   PostgresBookingRepository,
+  PostgresDepositOperationRepository,
   PostgresListingRepository,
   PostgresReservationHoldRepository,
 } from '../src/repositories.js';
@@ -23,6 +24,7 @@ const NOW = '2026-07-25T10:00:00.000Z';
 describeWithDatabase('Postgres Reservation Hold repository', () => {
   let sql: PostgresClient;
   let bookingRepository: PostgresBookingRepository;
+  let depositRepository: PostgresDepositOperationRepository;
   let listingRepository: PostgresListingRepository;
   let repository: PostgresReservationHoldRepository;
 
@@ -30,6 +32,7 @@ describeWithDatabase('Postgres Reservation Hold repository', () => {
     sql = createPostgresClient(databaseUrl ?? '', { maxConnections: 5 });
     await applyMigrations(sql);
     bookingRepository = new PostgresBookingRepository(sql);
+    depositRepository = new PostgresDepositOperationRepository(sql);
     listingRepository = new PostgresListingRepository(sql);
     repository = new PostgresReservationHoldRepository(sql);
   });
@@ -41,6 +44,7 @@ describeWithDatabase('Postgres Reservation Hold repository', () => {
         nook.rental_events,
         nook.payments,
         nook.escrows,
+        nook.operations,
         nook.bookings,
         nook.booking_requests,
         nook.reservation_holds,
@@ -252,6 +256,91 @@ describeWithDatabase('Postgres Reservation Hold repository', () => {
     expect(saved?.status).toBe('awaiting_deposit');
     expect(saved?.staySubtotal.toString()).toBe('50000');
     expect(saved?.depositAmount.toString()).toBe('50000');
+  });
+
+  it('prepares an idempotent deposit and confirms all stored Booking state atomically', async () => {
+    const createdHold = await repository.createActive({
+      requestId: 'request-for-deposit-operation',
+      listingId: LISTING_ID,
+      guestProfileId: GUEST_ONE_ID,
+      quoteId: QUOTE_ONE_ID,
+      stayRange: StayRange.fromStrings({
+        checkIn: '2026-08-10',
+        checkOut: '2026-08-15',
+      }),
+      expiresAt: '2026-07-25T10:10:00.000Z',
+      now: NOW,
+    });
+
+    expect(createdHold.status).toBe('created');
+    if (createdHold.status !== 'created') return;
+
+    const booking = {
+      id: '50000000-0000-4000-8000-000000000002',
+      listingId: LISTING_ID,
+      hostProfileId: HOST_ID,
+      guestProfileId: GUEST_ONE_ID,
+      quoteId: QUOTE_ONE_ID,
+      holdId: createdHold.hold.id,
+      stayRange: StayRange.fromStrings({
+        checkIn: '2026-08-10',
+        checkOut: '2026-08-15',
+      }),
+      settlementTokenId: '0.0.12345',
+      staySubtotal: TokenAmount.fromAtomicUnits('50000'),
+      depositAmount: TokenAmount.fromAtomicUnits('50000'),
+      status: 'awaiting_deposit' as const,
+      createdAt: NOW,
+      updatedAt: NOW,
+    };
+    await bookingRepository.save(booking);
+    const input = {
+      operationId: '80000000-0000-4000-8000-000000000001',
+      escrowId: '81000000-0000-4000-8000-000000000001',
+      paymentId: '82000000-0000-4000-8000-000000000001',
+      idempotencyKey: 'postgres-deposit-request',
+      booking,
+      escrowRecipientRef: '0.0.2002',
+      publicEvidenceRef: 'evidence-first-attempt',
+      now: NOW,
+    };
+
+    const prepared = await depositRepository.prepare(input);
+    const retry = await depositRepository.prepare({
+      ...input,
+      operationId: '80000000-0000-4000-8000-000000000002',
+      escrowId: '81000000-0000-4000-8000-000000000002',
+      paymentId: '82000000-0000-4000-8000-000000000002',
+      publicEvidenceRef: 'evidence-retry-is-ignored',
+    });
+
+    expect(retry.operation.id).toBe(prepared.operation.id);
+    expect(retry.operation.requestPayload.publicEvidenceRef).toBe('evidence-first-attempt');
+
+    const reserved = await depositRepository.saveOperation({
+      ...prepared.operation,
+      providerTransactionId: '0.0.1001@1784980800.000000001',
+      status: 'reserved',
+      updatedAt: NOW,
+    });
+    await depositRepository.saveOperation({
+      ...reserved.operation,
+      status: 'submitted',
+      attemptCount: 1,
+      updatedAt: NOW,
+    });
+    const confirmed = await depositRepository.confirmDeposit({
+      operationId: prepared.operation.id,
+      transactionId: '0.0.1001@1784980800.000000001',
+      providerResponse: { mirrorStatus: 'confirmed' },
+      now: '2026-07-25T10:00:02.000Z',
+    });
+
+    expect(confirmed.operation.status).toBe('confirmed');
+    expect(confirmed.booking.status).toBe('confirmed');
+    expect(confirmed.hold.status).toBe('converted');
+    expect(confirmed.escrow.status).toBe('funded');
+    expect(confirmed.payment.status).toBe('confirmed');
   });
 
   it('keeps every marketplace table behind default-deny row-level security', async () => {

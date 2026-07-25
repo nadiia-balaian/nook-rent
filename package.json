@@ -17,6 +17,8 @@
     "dev:worker": "pnpm --filter @nook-rent/worker dev",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
+    "hedera:preflight": "pnpm --filter @nook-rent/hedera hedera:preflight",
+    "hedera:setup": "pnpm --filter @nook-rent/hedera hedera:setup",
     "lint": "eslint .",
     "supabase:migrate": "pnpm --filter @nook-rent/supabase supabase:migrate",
     "supabase:seed-demo": "pnpm --filter @nook-rent/supabase supabase:seed-demo",

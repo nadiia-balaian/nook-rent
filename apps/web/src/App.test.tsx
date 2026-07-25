@@ -5,7 +5,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { App } from './App.js';
-import type { BookingQuote, Listing, ReservationResult } from './api.js';
+import type { BookingQuote, DepositResult, Listing, ReservationResult } from './api.js';
 
 const listing: Listing = {
   id: '30000000-0000-4000-8000-000000000001',
@@ -99,6 +99,50 @@ function reservation(mode: 'automatic' | 'manual'): ReservationResult {
   };
 }
 
+function confirmedDeposit(initialReservation: ReservationResult): DepositResult {
+  return {
+    idempotent: false,
+    operation: {
+      id: '80000000-0000-4000-8000-000000000001',
+      status: 'confirmed',
+      transactionId: '0.0.1001@1784980800.000000001',
+      transactionUrl: 'https://hashscan.io/testnet/transaction/0.0.1001%401784980800.000000001',
+      attemptCount: 1,
+      createdAt: '2026-07-25T10:00:00.000Z',
+      updatedAt: '2026-07-25T10:00:02.000Z',
+    },
+    escrow: {
+      id: '90000000-0000-4000-8000-000000000001',
+      tokenId: quote.settlementTokenId,
+      amountAtomic: quote.quotedDepositAtomic,
+      status: 'funded',
+      fundedTransactionId: '0.0.1001@1784980800.000000001',
+    },
+    payment: {
+      id: '91000000-0000-4000-8000-000000000001',
+      tokenId: quote.settlementTokenId,
+      amountAtomic: quote.quotedDepositAtomic,
+      status: 'confirmed',
+    },
+    booking: {
+      ...initialReservation.booking,
+      status: 'confirmed',
+    },
+    hold: {
+      ...initialReservation.hold,
+      status: 'converted',
+    },
+    evidence: {
+      status: 'confirmed',
+      transactionId: '0.0.1001@1784980801.000000001',
+      transactionUrl: 'https://hashscan.io/testnet/transaction/0.0.1001%401784980801.000000001',
+      sequenceNumber: 14,
+      topicId: '0.0.8001',
+      topicUrl: 'https://hashscan.io/testnet/topic/0.0.8001',
+    },
+  };
+}
+
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -133,6 +177,9 @@ function installMarketplaceApi(mode: 'automatic' | 'manual') {
       }
       if (url.pathname === '/v1/reservation-holds') {
         return Promise.resolve(jsonResponse(initialReservation));
+      }
+      if (url.pathname.endsWith('/deposit')) {
+        return Promise.resolve(jsonResponse(confirmedDeposit(initialReservation)));
       }
       if (url.pathname.endsWith('/decision')) {
         return Promise.resolve(
@@ -185,7 +232,7 @@ describe('Nook marketplace demo', () => {
     expect(screen.getByText('Review queue is clear')).toBeTruthy();
   });
 
-  it('completes the automatic approval path from search to status', async () => {
+  it('completes automatic approval and Testnet deposit confirmation', async () => {
     installMarketplaceApi('automatic');
     const user = userEvent.setup();
 
@@ -199,7 +246,14 @@ describe('Nook marketplace demo', () => {
 
     await user.click(screen.getByRole('button', { name: 'Reserve these dates' }));
     expect(await screen.findByRole('heading', { name: 'Approved—deposit is next' })).toBeTruthy();
-    expect(screen.getByText(/Hedera escrow arrives in Phase 5/)).toBeTruthy();
+
+    await user.click(screen.getByRole('button', { name: 'Fund Testnet deposit' }));
+    expect(
+      await screen.findByRole('heading', { name: 'Booking confirmed on Hedera' }),
+    ).toBeTruthy();
+    expect(screen.getByText('Real Testnet evidence')).toBeTruthy();
+    expect(screen.getByRole('link', { name: /HTS transfer/ })).toBeTruthy();
+    expect(screen.getByRole('link', { name: /HCS #14/ })).toBeTruthy();
   });
 
   it('hands a Newcomer request to the Host for an explicit decision', async () => {

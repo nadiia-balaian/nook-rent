@@ -1,6 +1,6 @@
 # Nook.rent implementation plan
 
-Status: active; Phases 0–4 implemented
+Status: active; Phases 0–5 implemented
 Strategy: build one end-to-end tracer bullet, then deepen it
 
 ## Completion rule
@@ -108,7 +108,7 @@ Exit check:
 
 Estimate: 3–5 focused hours
 
-Status: implemented on 2026-07-25; hosted demo seed not applied
+Status: implemented on 2026-07-25; hosted demo seed applied
 
 Implement:
 
@@ -160,6 +160,9 @@ Exit check:
 
 Estimate: 4–7 focused hours
 
+Status: completed on 2026-07-25 with hosted persistence and live Testnet
+deposit/HCS evidence
+
 Implement or adapt:
 
 - typed Hedera Testnet configuration;
@@ -188,6 +191,30 @@ Exit check:
 - one real Testnet financial operation is visible on HashScan;
 - retry does not duplicate the transfer;
 - a simulated timeout can be reconciled.
+
+Implemented locally:
+
+- Testnet-only typed configuration and a read-only Mirror Node preflight;
+- native HTS token transfer using a transaction ID reserved before submission;
+- durable Operation, Escrow, and Payment persistence;
+- Mirror Node reconciliation as the financial source of truth;
+- atomic Booking confirmation and Reservation Hold conversion;
+- minimal HCS event publication with exact sequence read-back;
+- deposit, Operation status, and manual reconciliation API routes;
+- Testnet transaction and HCS evidence states in the demo UI;
+- deterministic timeout, retry, failure, Mirror Node, and HCS tests.
+- guarded Testnet resource setup with signer validation and safe partial-run
+  reuse.
+
+Completed exit evidence:
+
+- all three migrations applied to hosted Supabase;
+- both seeded Listings updated to the Nook.rent HTS token;
+- one automatic-approval Booking funded with 50,000 atomic units;
+- Mirror Node confirmed the transfer and exact escrow balance;
+- Booking confirmed, Payment confirmed, Escrow funded, and Hold converted;
+- HCS `booking.deposit.funded` evidence published at sequence 1;
+- retry returned the same transaction with one submission attempt.
 
 ## Phase 6: World human-backed authorization
 

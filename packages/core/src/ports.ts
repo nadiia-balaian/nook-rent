@@ -4,8 +4,11 @@ import type {
   Booking,
   BookingQuote,
   BookingRequest,
+  Escrow,
+  ExternalOperation,
   Listing,
   MemberProfile,
+  Payment,
   ReservationHold,
   RentalReputationTier,
 } from './entities.js';
@@ -155,15 +158,55 @@ export interface FinancialLedgerPort {
   ): Promise<'pending' | 'confirmed' | 'failed' | 'unknown'>;
 }
 
+export interface DepositOperationSnapshot {
+  operation: ExternalOperation;
+  booking: Booking;
+  hold: ReservationHold;
+  escrow: Escrow;
+  payment: Payment;
+}
+
+export interface PrepareDepositOperationInput {
+  operationId: string;
+  escrowId: string;
+  paymentId: string;
+  idempotencyKey: string;
+  booking: Booking;
+  escrowRecipientRef: string;
+  publicEvidenceRef: string;
+  now: string;
+}
+
+export interface DepositOperationRepositoryPort {
+  prepare(input: PrepareDepositOperationInput): Promise<DepositOperationSnapshot>;
+  getById(operationId: string): Promise<DepositOperationSnapshot | undefined>;
+  saveOperation(operation: ExternalOperation): Promise<DepositOperationSnapshot>;
+  confirmDeposit(input: {
+    operationId: string;
+    transactionId: string;
+    providerResponse: Record<string, string | number | boolean | null>;
+    now: string;
+  }): Promise<DepositOperationSnapshot>;
+  failDeposit(input: {
+    operationId: string;
+    failureCode: string;
+    providerResponse: Record<string, string | number | boolean | null>;
+    now: string;
+  }): Promise<DepositOperationSnapshot>;
+}
+
 export interface RentalReputationPort {
   getTier(profileId: string): Promise<RentalReputationTier>;
 }
 
 export interface RentalEvidencePort {
+  reserveTransactionId(operationId: string): Promise<string>;
   publish(input: {
     operationId: string;
+    submissionTransactionId: string;
     eventId: string;
     eventType: string;
+    occurredAt: string;
     subjectRef: string;
     payload: Record<string, string | number | boolean>;
   }): Promise<{

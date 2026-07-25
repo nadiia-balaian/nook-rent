@@ -17,8 +17,12 @@ Rules:
 
 The migrations create an isolated `nook` schema containing the marketplace
 tables, Listing pricing terms, idempotency constraints, default-deny row-level
-security, atomic hold function, and bounded expiry function. They pass the
-repository and marketplace API integration suites against local PostgreSQL.
+security, atomic hold function, bounded expiry function, and durable Hedera
+deposit Operations. They pass the repository and marketplace API integration
+suites against local PostgreSQL.
+
+All three migrations are applied to hosted Supabase, including the Phase 5
+Operation uniqueness constraint.
 
 To apply the migration to an explicitly selected database:
 

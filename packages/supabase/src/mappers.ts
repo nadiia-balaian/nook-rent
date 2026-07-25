@@ -6,10 +6,16 @@ import {
   type BookingRequestApprovalResult,
   type BookingRequestStatus,
   type BookingStatus,
+  type Escrow,
+  type EscrowStatus,
+  type ExternalOperation,
+  type ExternalOperationStatus,
   type Listing,
   type ListingStatus,
   type MemberProfile,
   type MemberRole,
+  type Payment,
+  type PaymentStatus,
   type ReservationHold,
   type ReservationHoldStatus,
   type RentalReputationTier,
@@ -115,6 +121,49 @@ export interface BookingRow {
   updated_at: DatabaseTimestamp;
 }
 
+export interface ExternalOperationRow {
+  id: string;
+  operation_kind: string;
+  idempotency_key: string;
+  aggregate_type: string;
+  aggregate_id: string;
+  provider: string;
+  provider_transaction_id: string | null;
+  status: string;
+  request_payload: unknown;
+  provider_response: unknown;
+  failure_code: string | null;
+  attempt_count: number;
+  next_attempt_at: DatabaseTimestamp | null;
+  created_at: DatabaseTimestamp;
+  updated_at: DatabaseTimestamp;
+}
+
+export interface EscrowRow {
+  id: string;
+  booking_id: string;
+  token_id: string;
+  amount_atomic: string;
+  status: string;
+  funded_transaction_id: string | null;
+  release_transaction_id: string | null;
+  created_at: DatabaseTimestamp;
+  updated_at: DatabaseTimestamp;
+}
+
+export interface PaymentRow {
+  id: string;
+  booking_id: string;
+  payment_kind: string;
+  token_id: string;
+  amount_atomic: string;
+  recipient_ref: string;
+  status: string;
+  operation_id: string;
+  created_at: DatabaseTimestamp;
+  updated_at: DatabaseTimestamp;
+}
+
 function toIsoTimestamp(value: DatabaseTimestamp): string {
   return value instanceof Date ? value.toISOString() : new Date(value).toISOString();
 }
@@ -212,6 +261,72 @@ function bookingRequestApprovalResult(value: string): BookingRequestApprovalResu
     default:
       throw new Error(`Unsupported Booking Request result from database: ${value}`);
   }
+}
+
+function externalOperationStatus(value: string): ExternalOperationStatus {
+  switch (value) {
+    case 'pending':
+    case 'reserved':
+    case 'submitted':
+    case 'confirmed':
+    case 'failed':
+    case 'reconciling':
+      return value;
+    default:
+      throw new Error(`Unsupported Operation status from database: ${value}`);
+  }
+}
+
+function escrowStatus(value: string): EscrowStatus {
+  switch (value) {
+    case 'pending':
+    case 'submitted':
+    case 'funded':
+    case 'release_pending':
+    case 'released':
+    case 'refunded':
+    case 'failed':
+      return value;
+    default:
+      throw new Error(`Unsupported Escrow status from database: ${value}`);
+  }
+}
+
+function paymentStatus(value: string): PaymentStatus {
+  switch (value) {
+    case 'pending':
+    case 'submitted':
+    case 'confirmed':
+    case 'failed':
+      return value;
+    default:
+      throw new Error(`Unsupported Payment status from database: ${value}`);
+  }
+}
+
+function scalarRecord(
+  value: unknown,
+  field: string,
+): Record<string, string | number | boolean | null> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error(`${field} from database must be an object`);
+  }
+
+  const entries = Object.entries(value);
+
+  if (
+    entries.some(
+      ([, item]) =>
+        item !== null &&
+        typeof item !== 'string' &&
+        typeof item !== 'number' &&
+        typeof item !== 'boolean',
+    )
+  ) {
+    throw new Error(`${field} from database contains a non-scalar value`);
+  }
+
+  return Object.fromEntries(entries);
 }
 
 export function mapMemberProfileRow(row: MemberProfileRow): MemberProfile {
@@ -327,6 +442,79 @@ export function mapBookingRow(row: BookingRow): Booking {
     staySubtotal: TokenAmount.fromAtomicUnits(row.stay_subtotal_atomic),
     depositAmount: TokenAmount.fromAtomicUnits(row.deposit_amount_atomic),
     status: bookingStatus(row.status),
+    createdAt: toIsoTimestamp(row.created_at),
+    updatedAt: toIsoTimestamp(row.updated_at),
+  };
+}
+
+export function mapExternalOperationRow(row: ExternalOperationRow): ExternalOperation {
+  if (
+    row.operation_kind !== 'hedera_deposit' ||
+    row.aggregate_type !== 'booking' ||
+    row.provider !== 'hedera'
+  ) {
+    throw new Error(`Unsupported external Operation shape from database: ${row.id}`);
+  }
+
+  const providerTransactionId = row.provider_transaction_id ?? undefined;
+  const providerResponse =
+    row.provider_response === null
+      ? undefined
+      : scalarRecord(row.provider_response, 'provider_response');
+  const failureCode = row.failure_code ?? undefined;
+  const nextAttemptAt =
+    row.next_attempt_at === null ? undefined : toIsoTimestamp(row.next_attempt_at);
+
+  return {
+    id: row.id,
+    kind: row.operation_kind,
+    idempotencyKey: row.idempotency_key,
+    aggregateType: row.aggregate_type,
+    aggregateId: row.aggregate_id,
+    provider: row.provider,
+    ...(providerTransactionId ? { providerTransactionId } : {}),
+    status: externalOperationStatus(row.status),
+    requestPayload: scalarRecord(row.request_payload, 'request_payload'),
+    ...(providerResponse ? { providerResponse } : {}),
+    ...(failureCode ? { failureCode } : {}),
+    attemptCount: row.attempt_count,
+    ...(nextAttemptAt ? { nextAttemptAt } : {}),
+    createdAt: toIsoTimestamp(row.created_at),
+    updatedAt: toIsoTimestamp(row.updated_at),
+  };
+}
+
+export function mapEscrowRow(row: EscrowRow): Escrow {
+  const fundedTransactionId = row.funded_transaction_id ?? undefined;
+  const releaseTransactionId = row.release_transaction_id ?? undefined;
+
+  return {
+    id: row.id,
+    bookingId: row.booking_id,
+    tokenId: row.token_id,
+    amount: TokenAmount.fromAtomicUnits(row.amount_atomic),
+    status: escrowStatus(row.status),
+    ...(fundedTransactionId ? { fundedTransactionId } : {}),
+    ...(releaseTransactionId ? { releaseTransactionId } : {}),
+    createdAt: toIsoTimestamp(row.created_at),
+    updatedAt: toIsoTimestamp(row.updated_at),
+  };
+}
+
+export function mapPaymentRow(row: PaymentRow): Payment {
+  if (row.payment_kind !== 'deposit') {
+    throw new Error(`Unsupported Payment kind from database: ${row.payment_kind}`);
+  }
+
+  return {
+    id: row.id,
+    bookingId: row.booking_id,
+    kind: row.payment_kind,
+    tokenId: row.token_id,
+    amount: TokenAmount.fromAtomicUnits(row.amount_atomic),
+    recipientRef: row.recipient_ref,
+    status: paymentStatus(row.status),
+    operationId: row.operation_id,
     createdAt: toIsoTimestamp(row.created_at),
     updatedAt: toIsoTimestamp(row.updated_at),
   };

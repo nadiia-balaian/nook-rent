@@ -60,4 +60,24 @@ describe('Nook API', () => {
     });
     expect(response.json().error.requestId).toBeTypeOf('string');
   });
+
+  it('keeps the Hedera deposit route unavailable until the provider is configured', async () => {
+    const application = createApi();
+    applications.push(application);
+
+    const response = await application.inject({
+      method: 'POST',
+      url: '/v1/bookings/70000000-0000-4000-8000-000000000001/deposit',
+      headers: {
+        'idempotency-key': 'deposit-not-configured',
+      },
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toMatchObject({
+      error: {
+        code: 'hedera_unavailable',
+      },
+    });
+  });
 });

@@ -1,6 +1,7 @@
 import { createPostgresClient } from './client.js';
 
 const connectionString = process.env.SUPABASE_DB_URL;
+const settlementTokenId = process.env.HEDERA_TOKEN_ID?.trim() || '0.0.12345';
 
 if (!connectionString) {
   throw new Error('SUPABASE_DB_URL is required to seed demo data');
@@ -49,7 +50,7 @@ try {
           'lisbon-alfama-demo-area',
           array['wifi', 'desk', 'washer'],
           array['No smoking', 'Quiet after 22:00'],
-          '0.0.12345',
+          ${settlementTokenId},
           10000,
           50000,
           2,
@@ -65,7 +66,7 @@ try {
           'lisbon-estrela-demo-area',
           array['wifi', 'kitchen', 'air conditioning'],
           array['No parties', 'No smoking'],
-          '0.0.12345',
+          ${settlementTokenId},
           12500,
           60000,
           2,

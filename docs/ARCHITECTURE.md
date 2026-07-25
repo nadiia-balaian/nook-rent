@@ -1,6 +1,7 @@
 # Nook.rent architecture
 
-Status: Phase 4 marketplace UI implemented; sponsor flows remain planned
+Status: Phase 5 Hedera tracer complete with hosted state and live Testnet
+deposit/HCS evidence
 
 ## Principles
 
@@ -70,7 +71,9 @@ returns public read models. It is a composition root for provider adapters.
 ### `apps/worker`
 
 Claims durable jobs, runs constrained Agent tasks, reconciles provider writes,
-expires Reservation Holds, and rebuilds read projections.
+expires Reservation Holds, and rebuilds read projections. The current deposit
+tracer exposes explicit reconciliation through the API; background Operation
+claiming remains a later hardening step.
 
 ### `packages/core`
 
@@ -219,6 +222,21 @@ financial and authorization parameters from stored state.
   of the demonstrated workflow.
 - Keep Testnet keys in environment configuration only.
 
+The implemented deposit tracer stores its Operation before any network write
+and reserves a stable Hedera transaction ID before submission. A submission
+timeout moves the Operation to `reconciling`; it does not trigger a second
+transfer. Mirror Node decides whether the transfer confirmed or failed.
+
+On confirmation, one database transaction funds the Escrow, confirms the
+Payment and Booking, and converts the Reservation Hold. HCS publication is a
+separate retriable evidence step. Its payload contains only a pseudonymous
+public evidence reference, token and amount, deposit transaction ID, network,
+and funded state.
+
+For the hackathon tracer, the configured operator is the demo token payer and
+the configured escrow account is the receiver. This is a Testnet demonstration
+model, not a production custody design.
+
 ## Supabase architecture
 
 - All schema changes are versioned migrations.
@@ -232,8 +250,8 @@ financial and authorization parameters from stored state.
 - Nook.rent tables must not depend on unrelated application tables.
 
 The schema and repositories are implemented and tested against local
-PostgreSQL. Both current migrations are applied to the isolated hosted `nook`
-schema.
+PostgreSQL. The first two migrations are applied to the isolated hosted `nook`
+schema. The Phase 5 Operation migration remains an explicit hosted write.
 
 ## Deployment shape
 

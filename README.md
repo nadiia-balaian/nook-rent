@@ -41,7 +41,8 @@ rental behavior.
 
 ## Repository status
 
-Phases 1–4 are implemented:
+Phases 1–5 are implemented. The Hedera tracer has dedicated Testnet resources,
+a hosted Operation schema, and verified live deposit/HCS evidence:
 
 - `pnpm` TypeScript monorepo and shared quality gate;
 - Fastify API shell with a tested health endpoint;
@@ -65,9 +66,15 @@ Phases 1–4 are implemented:
 - explicit loading, unavailable, empty, expired, rejected, and failed states;
 - an evidence panel that distinguishes implemented and planned integrations;
 - browser-level tests for both approval paths.
+- durable, idempotent HTS deposit Operations with safe reconciliation;
+- Mirror Node confirmation before Booking finalization;
+- minimal HCS deposit evidence with Mirror Node read-back;
+- Testnet preflight, deposit API routes, and HashScan links;
+- explicit pending, reconciling, confirmed, and failed deposit UI states.
 
-The two database migrations are applied to the isolated `nook` schema in hosted
-Supabase. Demo seed data has not been inserted into the hosted database.
+All three database migrations are applied to the isolated `nook` schema in
+hosted Supabase. The pseudonymous demo seed contains three profiles, two Lisbon
+Listings with the Nook.rent HTS token, and their availability windows.
 
 Monorepo layout:
 
@@ -99,6 +106,8 @@ docs/
    at a time.
 5. Review [docs/PRIZE_STRATEGY.md](./docs/PRIZE_STRATEGY.md) before changing a
    sponsor integration.
+6. Review [docs/HEDERA_TESTNET.md](./docs/HEDERA_TESTNET.md) for public Testnet
+   resource evidence.
 
 No credentials or private signing material belong in this repository.
 
@@ -116,6 +125,31 @@ This starts the API and web application together. The API exposes `/health`,
 
 Running `pnpm supabase:seed-demo` is an explicit database write and should be
 used only against the intended demo environment.
+
+## Prepare Hedera Testnet
+
+Configure Nook.rent-specific Testnet values from `.env.example`. The demo
+operator pays the deposit token into the configured escrow account; both
+accounts must be associated with that token. Then run the read-only preflight:
+
+```text
+pnpm hedera:preflight
+```
+
+The preflight verifies the operator, escrow account, token, HCS topic, token
+associations, and payer token balance through Mirror Node. It does not submit a
+transaction. Applying the Phase 5 migration and funding a deposit are separate,
+explicit hosted writes. After setting `HEDERA_TOKEN_ID`, rerunning the explicit
+demo seed updates the seeded Listings from their local placeholder to that
+Testnet token.
+
+Creating or reusing Testnet resources is guarded by an explicit confirmation:
+
+```text
+HEDERA_SETUP_CONFIRM=create-nook-testnet-resources pnpm hedera:setup
+```
+
+Do not run this command against unreviewed account or resource values.
 
 ## Working agreement
 

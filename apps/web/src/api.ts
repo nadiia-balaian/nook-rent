@@ -141,6 +141,58 @@ export interface ReservationResult {
   };
 }
 
+export interface DepositResult {
+  idempotent: boolean;
+  operation: {
+    id: string;
+    status: 'pending' | 'reserved' | 'submitted' | 'confirmed' | 'failed' | 'reconciling';
+    transactionId?: string;
+    transactionUrl?: string;
+    failureCode?: string;
+    attemptCount: number;
+    nextAttemptAt?: string;
+    createdAt: string;
+    updatedAt: string;
+  };
+  escrow: {
+    id: string;
+    tokenId: string;
+    amountAtomic: string;
+    status:
+      'pending' | 'submitted' | 'funded' | 'release_pending' | 'released' | 'refunded' | 'failed';
+    fundedTransactionId?: string;
+  };
+  payment: {
+    id: string;
+    tokenId: string;
+    amountAtomic: string;
+    status: 'pending' | 'submitted' | 'confirmed' | 'failed';
+  };
+  booking: Booking;
+  hold: ReservationResult['hold'];
+  evidence:
+    | {
+        status: 'not_started';
+        topicId?: string;
+        topicUrl?: string;
+      }
+    | {
+        status: 'pending';
+        transactionId: string;
+        transactionUrl?: string;
+        topicId?: string;
+        topicUrl?: string;
+      }
+    | {
+        status: 'confirmed';
+        transactionId: string;
+        transactionUrl?: string;
+        sequenceNumber: number;
+        topicId?: string;
+        topicUrl?: string;
+      };
+}
+
 export interface SearchInput {
   city: string;
   checkIn: string;
@@ -269,6 +321,19 @@ export const nookApi = {
 
   publishListing: (listingId: string) =>
     request<ListingDetail>(`/v1/listings/${listingId}/publish`, {
+      method: 'POST',
+    }),
+
+  fundDeposit: (input: { bookingId: string; idempotencyKey: string }) =>
+    request<DepositResult>(`/v1/bookings/${input.bookingId}/deposit`, {
+      method: 'POST',
+      headers: {
+        'idempotency-key': input.idempotencyKey,
+      },
+    }),
+
+  reconcileDeposit: (operationId: string) =>
+    request<DepositResult>(`/v1/operations/${operationId}/reconcile`, {
       method: 'POST',
     }),
 };

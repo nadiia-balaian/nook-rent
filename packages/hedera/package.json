@@ -7,9 +7,15 @@
     ".": "./src/index.ts"
   },
   "scripts": {
+    "hedera:preflight": "node --env-file-if-exists=../../.env --import tsx src/preflight-cli.ts",
+    "hedera:setup": "node --env-file-if-exists=../../.env --import tsx src/setup-cli.ts",
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
+    "@hashgraph/sdk": "2.80.0",
     "@nook-rent/core": "workspace:*"
+  },
+  "devDependencies": {
+    "tsx": "4.23.1"
   }
 }

@@ -29,6 +29,13 @@ Reservation Hold suite applies the real migration and proves:
 - exact Booking amount mapping;
 - default-deny row-level security.
 
+The deposit Operation suite additionally proves:
+
+- one prepared Operation, Escrow, and deposit Payment per Booking;
+- idempotent preparation with immutable token, amount, and receiver terms;
+- atomic Booking confirmation, Hold conversion, Escrow funding, and Payment
+  confirmation.
+
 Other provider adapters use controlled fakes that match captured, redacted
 schemas:
 
@@ -38,6 +45,12 @@ schemas:
 - AI structured responses and refusal paths.
 
 Fakes prove application behavior, not sponsor eligibility.
+
+The Hedera adapter unit suite covers configuration rejection, Mirror Node
+transaction mapping, HCS decoding, evidence privacy rules, and message size.
+The core deposit suite covers successful confirmation, unknown submission
+reconciliation without resubmission, and safe Hold release after confirmed
+failure.
 
 ### Hosted integration tests
 
@@ -74,7 +87,19 @@ conflicting-date rejection.
 
 The Phase 4 browser-component suite exercises API readiness, Guest/Host role
 switching, search and quote presentation, automatic approval, Newcomer Host
-review, and the explicit Host decision handoff.
+review, the explicit Host decision handoff, deposit confirmation, and HTS/HCS
+evidence links.
+
+The Phase 5 API integration path uses controlled Hedera fakes with real
+PostgreSQL repositories to prove the full local flow through confirmed Booking,
+converted Hold, funded Escrow, confirmed Payment, and idempotent retry. It does
+not count as live sponsor evidence.
+
+The opt-in Phase 5 exit run additionally proved one hosted automatic-approval
+Booking, real HTS deposit, initial `reconciling` response, Mirror Node
+confirmation, HCS sequence read-back, exact token balance movement, and a retry
+with no second submission. Public identifiers and explorer links are recorded
+in [HEDERA_TESTNET.md](./HEDERA_TESTNET.md).
 
 ## Required negative cases
 

@@ -1,5 +1,6 @@
 export * from './approval-policy.js';
 export * from './booking-quote.js';
+export * from './deposit-service.js';
 export * from './entities.js';
 export * from './errors.js';
 export * from './local-date.js';

@@ -1,3 +1,4 @@
+import { DomainConflictError } from '@nook-rent/core';
 import type {
   AvailabilityWindow,
   AvailabilityWindowRepositoryPort,
@@ -9,6 +10,9 @@ import type {
   BookingRequestRepositoryPort,
   CreateReservationHoldInput,
   CreateReservationHoldResult,
+  DepositOperationRepositoryPort,
+  DepositOperationSnapshot,
+  ExternalOperation,
   Listing,
   ListingApprovalPolicyRepositoryPort,
   ListingRepositoryPort,
@@ -19,6 +23,7 @@ import type {
   ReservationHoldRepositoryPort,
   RentalReputationPort,
   RentalReputationTier,
+  PrepareDepositOperationInput,
   StoredListingApprovalPolicy,
 } from '@nook-rent/core';
 
@@ -28,15 +33,21 @@ import {
   type BookingRow,
   type BookingQuoteRow,
   type BookingRequestRow,
+  type EscrowRow,
+  type ExternalOperationRow,
   type ListingRow,
   mapAvailabilityWindowRow,
   mapBookingRow,
   mapBookingQuoteRow,
   mapBookingRequestRow,
+  mapEscrowRow,
+  mapExternalOperationRow,
   mapListingRow,
   mapMemberProfileRow,
   mapReservationHoldRow,
+  mapPaymentRow,
   type MemberProfileRow,
+  type PaymentRow,
   type ReservationHoldRow,
 } from './mappers.js';
 
@@ -546,5 +557,447 @@ export class PostgresRentalReputationRepository implements RentalReputationPort 
     `;
 
     return row ? mapReputationTier(row.tier) : 'newcomer';
+  }
+}
+
+function depositRequestPayload(input: PrepareDepositOperationInput) {
+  return {
+    amountAtomic: input.booking.depositAmount.toString(),
+    bookingId: input.booking.id,
+    escrowRecipientRef: input.escrowRecipientRef,
+    publicEvidenceRef: input.publicEvidenceRef,
+    tokenId: input.booking.settlementTokenId,
+    version: 1,
+  };
+}
+
+function sameScalarRecord(
+  left: Record<string, string | number | boolean | null>,
+  right: Record<string, string | number | boolean | null>,
+): boolean {
+  const leftEntries = Object.entries(left).sort(([leftKey], [rightKey]) =>
+    leftKey.localeCompare(rightKey),
+  );
+  const rightEntries = Object.entries(right).sort(([leftKey], [rightKey]) =>
+    leftKey.localeCompare(rightKey),
+  );
+
+  return JSON.stringify(leftEntries) === JSON.stringify(rightEntries);
+}
+
+function depositTerms(
+  payload: Record<string, string | number | boolean | null>,
+): Record<string, string | number | boolean | null> {
+  return {
+    amountAtomic: payload.amountAtomic ?? null,
+    bookingId: payload.bookingId ?? null,
+    escrowRecipientRef: payload.escrowRecipientRef ?? null,
+    tokenId: payload.tokenId ?? null,
+    version: payload.version ?? null,
+  };
+}
+
+function requireSingleMutation(rows: { id: string }[], context: string): void {
+  if (rows.length !== 1) {
+    throw new Error(`${context} expected one stored row, received ${rows.length}`);
+  }
+}
+
+export class PostgresDepositOperationRepository implements DepositOperationRepositoryPort {
+  constructor(private readonly sql: PostgresClient) {}
+
+  async prepare(input: PrepareDepositOperationInput): Promise<DepositOperationSnapshot> {
+    const requestPayload = depositRequestPayload(input);
+
+    await this.sql.begin(async (transaction) => {
+      await transaction`
+        insert into nook.operations (
+          id,
+          operation_kind,
+          idempotency_key,
+          aggregate_type,
+          aggregate_id,
+          provider,
+          status,
+          request_payload,
+          created_at,
+          updated_at
+        )
+        values (
+          ${input.operationId},
+          'hedera_deposit',
+          ${input.idempotencyKey},
+          'booking',
+          ${input.booking.id},
+          'hedera',
+          'pending',
+          ${transaction.json(requestPayload)},
+          ${input.now},
+          ${input.now}
+        )
+        on conflict do nothing
+      `;
+
+      const [operationRow] = await transaction<ExternalOperationRow[]>`
+        select *
+        from nook.operations
+        where operation_kind = 'hedera_deposit'
+          and idempotency_key = ${input.idempotencyKey}
+        for update
+      `;
+
+      if (!operationRow) {
+        throw new DomainConflictError(
+          'deposit_operation_already_exists',
+          `A different deposit Operation already exists for ${input.booking.id}`,
+        );
+      }
+
+      const operation = mapExternalOperationRow(operationRow);
+
+      if (
+        operation.aggregateId !== input.booking.id ||
+        !sameScalarRecord(depositTerms(operation.requestPayload), depositTerms(requestPayload))
+      ) {
+        throw new DomainConflictError(
+          'deposit_idempotency_key_reused',
+          'Deposit idempotency key was reused with different terms',
+        );
+      }
+
+      await transaction`
+        insert into nook.escrows (
+          id,
+          booking_id,
+          token_id,
+          amount_atomic,
+          status,
+          created_at,
+          updated_at
+        )
+        values (
+          ${input.escrowId},
+          ${input.booking.id},
+          ${input.booking.settlementTokenId},
+          ${input.booking.depositAmount.toString()},
+          'pending',
+          ${input.now},
+          ${input.now}
+        )
+        on conflict (booking_id) do nothing
+      `;
+      await transaction`
+        insert into nook.payments (
+          id,
+          booking_id,
+          payment_kind,
+          token_id,
+          amount_atomic,
+          recipient_ref,
+          status,
+          operation_id,
+          created_at,
+          updated_at
+        )
+        values (
+          ${input.paymentId},
+          ${input.booking.id},
+          'deposit',
+          ${input.booking.settlementTokenId},
+          ${input.booking.depositAmount.toString()},
+          ${input.escrowRecipientRef},
+          'pending',
+          ${operation.id},
+          ${input.now},
+          ${input.now}
+        )
+        on conflict (booking_id, payment_kind) do nothing
+      `;
+    });
+
+    const snapshot = await this.getByIdOrThrowByKey(input.idempotencyKey);
+
+    if (
+      snapshot.escrow.tokenId !== input.booking.settlementTokenId ||
+      !snapshot.escrow.amount.equals(input.booking.depositAmount) ||
+      snapshot.payment.recipientRef !== input.escrowRecipientRef ||
+      snapshot.payment.operationId !== snapshot.operation.id
+    ) {
+      throw new DomainConflictError(
+        'deposit_terms_mismatch',
+        'Stored deposit resources do not match the accepted Booking terms',
+      );
+    }
+
+    return snapshot;
+  }
+
+  async getById(operationId: string): Promise<DepositOperationSnapshot | undefined> {
+    const [operationRow] = await this.sql<ExternalOperationRow[]>`
+      select *
+      from nook.operations
+      where id = ${operationId}
+        and operation_kind = 'hedera_deposit'
+    `;
+
+    return operationRow ? this.loadSnapshot(mapExternalOperationRow(operationRow)) : undefined;
+  }
+
+  async saveOperation(operation: ExternalOperation): Promise<DepositOperationSnapshot> {
+    const rows = await this.sql<{ id: string }[]>`
+      update nook.operations
+      set
+        provider_transaction_id = ${operation.providerTransactionId ?? null},
+        status = ${operation.status},
+        provider_response = ${operation.providerResponse ? this.sql.json(operation.providerResponse) : null},
+        failure_code = ${operation.failureCode ?? null},
+        attempt_count = ${operation.attemptCount},
+        next_attempt_at = ${operation.nextAttemptAt ?? null},
+        updated_at = ${operation.updatedAt}
+      where id = ${operation.id}
+        and operation_kind = ${operation.kind}
+        and idempotency_key = ${operation.idempotencyKey}
+        and aggregate_type = ${operation.aggregateType}
+        and aggregate_id = ${operation.aggregateId}
+        and provider = ${operation.provider}
+        and request_payload = ${this.sql.json(operation.requestPayload)}
+      returning id
+    `;
+
+    if (rows.length !== 1) {
+      throw new Error(`Deposit Operation not found or immutable fields changed: ${operation.id}`);
+    }
+
+    return this.getByIdOrThrow(operation.id);
+  }
+
+  async confirmDeposit(input: {
+    operationId: string;
+    transactionId: string;
+    providerResponse: Record<string, string | number | boolean | null>;
+    now: string;
+  }): Promise<DepositOperationSnapshot> {
+    await this.sql.begin(async (transaction) => {
+      const operations = await transaction<{ id: string }[]>`
+        update nook.operations
+        set
+          provider_transaction_id = ${input.transactionId},
+          status = 'confirmed',
+          provider_response = ${transaction.json(input.providerResponse)},
+          failure_code = null,
+          next_attempt_at = null,
+          updated_at = ${input.now}
+        where id = ${input.operationId}
+          and operation_kind = 'hedera_deposit'
+          and status in ('submitted', 'reconciling', 'confirmed')
+          and (
+            provider_transaction_id is null
+            or provider_transaction_id = ${input.transactionId}
+          )
+        returning id
+      `;
+
+      if (operations.length !== 1) {
+        throw new Error(`Deposit Operation cannot be confirmed: ${input.operationId}`);
+      }
+
+      const escrows = await transaction<{ id: string }[]>`
+        update nook.escrows
+        set
+          status = 'funded',
+          funded_transaction_id = ${input.transactionId},
+          updated_at = ${input.now}
+        where booking_id = (
+          select aggregate_id
+          from nook.operations
+          where id = ${input.operationId}
+        )
+        returning id
+      `;
+      const payments = await transaction<{ id: string }[]>`
+        update nook.payments
+        set
+          status = 'confirmed',
+          updated_at = ${input.now}
+        where operation_id = ${input.operationId}
+          and payment_kind = 'deposit'
+        returning id
+      `;
+      const bookings = await transaction<{ id: string }[]>`
+        update nook.bookings
+        set
+          status = 'confirmed',
+          updated_at = ${input.now}
+        where id = (
+          select aggregate_id
+          from nook.operations
+          where id = ${input.operationId}
+        )
+          and status in ('awaiting_deposit', 'confirmed')
+        returning id
+      `;
+      const holds = await transaction<{ id: string }[]>`
+        update nook.reservation_holds
+        set
+          status = 'converted',
+          updated_at = ${input.now}
+        where id = (
+          select booking.hold_id
+          from nook.bookings as booking
+          inner join nook.operations as operation
+            on operation.aggregate_id = booking.id
+          where operation.id = ${input.operationId}
+        )
+          and status in ('active', 'expired', 'converted')
+        returning id
+      `;
+
+      requireSingleMutation(escrows, 'Deposit Escrow confirmation');
+      requireSingleMutation(payments, 'Deposit Payment confirmation');
+      requireSingleMutation(bookings, 'Deposit Booking confirmation');
+      requireSingleMutation(holds, 'Deposit Reservation Hold conversion');
+    });
+
+    return this.getByIdOrThrow(input.operationId);
+  }
+
+  async failDeposit(input: {
+    operationId: string;
+    failureCode: string;
+    providerResponse: Record<string, string | number | boolean | null>;
+    now: string;
+  }): Promise<DepositOperationSnapshot> {
+    await this.sql.begin(async (transaction) => {
+      const operations = await transaction<{ id: string }[]>`
+        update nook.operations
+        set
+          status = 'failed',
+          provider_response = ${transaction.json(input.providerResponse)},
+          failure_code = ${input.failureCode},
+          next_attempt_at = null,
+          updated_at = ${input.now}
+        where id = ${input.operationId}
+          and operation_kind = 'hedera_deposit'
+          and status in ('reserved', 'submitted', 'reconciling', 'failed')
+        returning id
+      `;
+
+      if (operations.length !== 1) {
+        throw new Error(`Deposit Operation cannot be failed: ${input.operationId}`);
+      }
+
+      const escrows = await transaction<{ id: string }[]>`
+        update nook.escrows
+        set status = 'failed', updated_at = ${input.now}
+        where booking_id = (
+          select aggregate_id
+          from nook.operations
+          where id = ${input.operationId}
+        )
+        returning id
+      `;
+      const payments = await transaction<{ id: string }[]>`
+        update nook.payments
+        set status = 'failed', updated_at = ${input.now}
+        where operation_id = ${input.operationId}
+          and payment_kind = 'deposit'
+        returning id
+      `;
+      const bookings = await transaction<{ id: string }[]>`
+        update nook.bookings
+        set status = 'expired', updated_at = ${input.now}
+        where id = (
+          select aggregate_id
+          from nook.operations
+          where id = ${input.operationId}
+        )
+          and status in ('awaiting_deposit', 'expired')
+        returning id
+      `;
+      const holds = await transaction<{ id: string }[]>`
+        update nook.reservation_holds
+        set status = 'released', updated_at = ${input.now}
+        where id = (
+          select booking.hold_id
+          from nook.bookings as booking
+          inner join nook.operations as operation
+            on operation.aggregate_id = booking.id
+          where operation.id = ${input.operationId}
+        )
+          and status in ('active', 'expired', 'released')
+        returning id
+      `;
+
+      requireSingleMutation(escrows, 'Failed Deposit Escrow');
+      requireSingleMutation(payments, 'Failed Deposit Payment');
+      requireSingleMutation(bookings, 'Failed Deposit Booking');
+      requireSingleMutation(holds, 'Failed Deposit Reservation Hold release');
+    });
+
+    return this.getByIdOrThrow(input.operationId);
+  }
+
+  private async getByIdOrThrow(operationId: string): Promise<DepositOperationSnapshot> {
+    const snapshot = await this.getById(operationId);
+
+    if (!snapshot) {
+      throw new Error(`Deposit Operation not found: ${operationId}`);
+    }
+
+    return snapshot;
+  }
+
+  private async getByIdOrThrowByKey(idempotencyKey: string): Promise<DepositOperationSnapshot> {
+    const [operationRow] = await this.sql<ExternalOperationRow[]>`
+      select *
+      from nook.operations
+      where operation_kind = 'hedera_deposit'
+        and idempotency_key = ${idempotencyKey}
+    `;
+
+    if (!operationRow) {
+      throw new Error(`Deposit Operation not found for idempotency key`);
+    }
+
+    return this.loadSnapshot(mapExternalOperationRow(operationRow));
+  }
+
+  private async loadSnapshot(operation: ExternalOperation): Promise<DepositOperationSnapshot> {
+    const [[bookingRow], [holdRow], [escrowRow], [paymentRow]] = await Promise.all([
+      this.sql<BookingRow[]>`
+        select *
+        from nook.bookings
+        where id = ${operation.aggregateId}
+      `,
+      this.sql<ReservationHoldRow[]>`
+        select hold.*
+        from nook.reservation_holds as hold
+        inner join nook.bookings as booking on booking.hold_id = hold.id
+        where booking.id = ${operation.aggregateId}
+      `,
+      this.sql<EscrowRow[]>`
+        select *
+        from nook.escrows
+        where booking_id = ${operation.aggregateId}
+      `,
+      this.sql<PaymentRow[]>`
+        select *
+        from nook.payments
+        where operation_id = ${operation.id}
+          and payment_kind = 'deposit'
+      `,
+    ]);
+
+    if (!bookingRow || !holdRow || !escrowRow || !paymentRow) {
+      throw new Error(`Deposit Operation is missing related stored state: ${operation.id}`);
+    }
+
+    return {
+      operation,
+      booking: mapBookingRow(bookingRow),
+      hold: mapReservationHoldRow(holdRow),
+      escrow: mapEscrowRow(escrowRow),
+      payment: mapPaymentRow(paymentRow),
+    };
   }
 }

@@ -8,6 +8,7 @@ import {
   Clock3,
   Coins,
   Database,
+  ExternalLink,
   Globe2,
   Home,
   LoaderCircle,
@@ -32,6 +33,7 @@ import {
 
 import {
   type BookingQuote,
+  type DepositResult,
   type Listing,
   type ListingDetail,
   NookApiError,
@@ -44,7 +46,15 @@ import { BOOKING_STEPS, DEFAULT_SEARCH, DEMO_PROFILES, type DemoGuestKey } from 
 type DemoRole = 'guest' | 'host';
 type ApiStatus = 'checking' | 'ready' | 'unavailable';
 type BusyAction =
-  'create-listing' | 'decide' | 'publish-listing' | 'quote' | 'reserve' | 'search' | null;
+  | 'create-listing'
+  | 'decide'
+  | 'deposit'
+  | 'publish-listing'
+  | 'quote'
+  | 'reconcile'
+  | 'reserve'
+  | 'search'
+  | null;
 
 const initialListingDraft = {
   title: 'Sunny Graça home with a work corner',
@@ -89,6 +99,8 @@ function friendlyError(error: NookApiError): string {
       return 'Check the dates and details, then try again.';
     case 'booking_request_already_decided':
       return 'This request has already been decided.';
+    case 'hedera_unavailable':
+      return 'Hedera Testnet is not configured yet. Add the new Nook.rent Testnet resources to the API environment.';
     default:
       return error.message || 'Something went wrong. Please try again.';
   }
@@ -105,6 +117,7 @@ export function App() {
   const [selectedListing, setSelectedListing] = useState<Listing | null>(null);
   const [quote, setQuote] = useState<BookingQuote | null>(null);
   const [reservation, setReservation] = useState<ReservationResult | null>(null);
+  const [deposit, setDeposit] = useState<DepositResult | null>(null);
   const [listingDraft, setListingDraft] = useState(initialListingDraft);
   const [createdListing, setCreatedListing] = useState<ListingDetail | null>(null);
 
@@ -130,6 +143,7 @@ export function App() {
     setSelectedListing(null);
     setQuote(null);
     setReservation(null);
+    setDeposit(null);
     setError(null);
   };
 
@@ -156,6 +170,7 @@ export function App() {
     setSelectedListing(null);
     setQuote(null);
     setReservation(null);
+    setDeposit(null);
 
     const result = await runAction('search', () => nookApi.searchListings(search));
     if (result) setListings(result.items);
@@ -164,6 +179,7 @@ export function App() {
   const createQuote = async (listing: Listing) => {
     setSelectedListing(listing);
     setReservation(null);
+    setDeposit(null);
     const result = await runAction('quote', () =>
       nookApi.createQuote({
         listingId: listing.id,
@@ -185,6 +201,47 @@ export function App() {
       }),
     );
     if (result) setReservation(result);
+  };
+
+  const fundDeposit = async () => {
+    if (!reservation) return;
+
+    const result = await runAction('deposit', () =>
+      nookApi.fundDeposit({
+        bookingId: reservation.booking.id,
+        idempotencyKey: `nook-deposit-${reservation.booking.id}`,
+      }),
+    );
+
+    if (result) {
+      setDeposit(result);
+      setReservation({
+        ...reservation,
+        booking: result.booking,
+        hold: result.hold,
+      });
+    }
+  };
+
+  const reconcileDeposit = async () => {
+    if (!deposit) return;
+
+    const result = await runAction('reconcile', () =>
+      nookApi.reconcileDeposit(deposit.operation.id),
+    );
+
+    if (result) {
+      setDeposit(result);
+      setReservation((current) =>
+        current
+          ? {
+              ...current,
+              booking: result.booking,
+              hold: result.hold,
+            }
+          : current,
+      );
+    }
   };
 
   const decideRequest = async (decision: 'approved' | 'rejected') => {
@@ -311,6 +368,7 @@ export function App() {
         {role === 'guest' ? (
           <GuestExperience
             busyAction={busyAction}
+            deposit={deposit}
             error={error}
             guestKey={guestKey}
             listings={listings}
@@ -319,8 +377,10 @@ export function App() {
             reservation={reservation}
             search={search}
             selectedListing={selectedListing}
+            onFundDeposit={fundDeposit}
             onGuestChange={resetGuestFlow}
             onQuote={createQuote}
+            onReconcileDeposit={reconcileDeposit}
             onReserve={reserveDates}
             onSearch={searchListings}
             setSearch={setSearch}
@@ -341,7 +401,7 @@ export function App() {
           />
         )}
 
-        <EvidencePanel />
+        <EvidencePanel deposit={deposit} />
       </main>
 
       <footer>
@@ -371,6 +431,7 @@ function ApiStatusChip({ status }: { status: ApiStatus }) {
 
 interface GuestExperienceProps {
   busyAction: BusyAction;
+  deposit: DepositResult | null;
   error: NookApiError | null;
   guestKey: DemoGuestKey;
   listings: Listing[] | null;
@@ -379,8 +440,10 @@ interface GuestExperienceProps {
   reservation: ReservationResult | null;
   search: SearchInput;
   selectedListing: Listing | null;
+  onFundDeposit: () => Promise<void>;
   onGuestChange: (guestKey: DemoGuestKey) => void;
   onQuote: (listing: Listing) => Promise<void>;
+  onReconcileDeposit: () => Promise<void>;
   onReserve: () => Promise<void>;
   onSearch: (event: FormEvent) => Promise<void>;
   setSearch: Dispatch<SetStateAction<SearchInput>>;
@@ -637,10 +700,13 @@ function GuestExperience(props: GuestExperienceProps) {
       {props.quote && props.selectedListing && (
         <QuotePanel
           busyAction={props.busyAction}
+          deposit={props.deposit}
           listing={props.selectedListing}
           quote={props.quote}
           quoteExpired={props.quoteExpired}
           reservation={props.reservation}
+          onFundDeposit={props.onFundDeposit}
+          onReconcileDeposit={props.onReconcileDeposit}
           onReserve={props.onReserve}
           switchToHost={props.switchToHost}
         />
@@ -651,10 +717,13 @@ function GuestExperience(props: GuestExperienceProps) {
 
 interface QuotePanelProps {
   busyAction: BusyAction;
+  deposit: DepositResult | null;
   listing: Listing;
   quote: BookingQuote;
   quoteExpired: boolean;
   reservation: ReservationResult | null;
+  onFundDeposit: () => Promise<void>;
+  onReconcileDeposit: () => Promise<void>;
   onReserve: () => Promise<void>;
   switchToHost: () => void;
 }
@@ -726,17 +795,32 @@ function QuotePanel(props: QuotePanelProps) {
       </div>
 
       {props.reservation && (
-        <BookingStatusCard reservation={props.reservation} switchToHost={props.switchToHost} />
+        <BookingStatusCard
+          busyAction={props.busyAction}
+          deposit={props.deposit}
+          reservation={props.reservation}
+          onFundDeposit={props.onFundDeposit}
+          onReconcileDeposit={props.onReconcileDeposit}
+          switchToHost={props.switchToHost}
+        />
       )}
     </section>
   );
 }
 
 function BookingStatusCard({
+  busyAction,
+  deposit,
   reservation,
+  onFundDeposit,
+  onReconcileDeposit,
   switchToHost,
 }: {
+  busyAction: BusyAction;
+  deposit: DepositResult | null;
   reservation: ReservationResult;
+  onFundDeposit: () => Promise<void>;
+  onReconcileDeposit: () => Promise<void>;
   switchToHost: () => void;
 }) {
   const currentStatus = reservation.booking.status;
@@ -754,14 +838,18 @@ function BookingStatusCard({
           ? 'Request declined'
           : currentStatus === 'approval_pending'
             ? 'Waiting for Maria'
-            : 'Approved—deposit is next'}
+            : currentStatus === 'confirmed'
+              ? 'Booking confirmed on Hedera'
+              : 'Approved—deposit is next'}
       </h2>
       <p>
         {isRejected
           ? 'The hold was released, so the dates are available again.'
           : currentStatus === 'approval_pending'
             ? 'The dates are safely held while the Host reviews this Newcomer request.'
-            : 'The Host policy approved this request. Hedera escrow arrives in Phase 5.'}
+            : currentStatus === 'confirmed'
+              ? 'The Testnet deposit is funded and the Booking is confirmed.'
+              : 'The Host policy approved this request. Fund the Testnet deposit to confirm.'}
       </p>
 
       <ol className="status-timeline">
@@ -782,18 +870,102 @@ function BookingStatusCard({
 
       <div className="hold-reference">
         <Clock3 size={15} />
-        {isRejected
+        {isRejected || reservation.hold.status === 'released'
           ? 'Hold released—dates are available again'
-          : `Hold active until ${new Date(reservation.hold.expiresAt).toLocaleTimeString([], {
-              hour: '2-digit',
-              minute: '2-digit',
-            })}`}
+          : reservation.hold.status === 'converted'
+            ? 'Reservation Hold converted into a confirmed Booking'
+            : `Hold active until ${new Date(reservation.hold.expiresAt).toLocaleTimeString([], {
+                hour: '2-digit',
+                minute: '2-digit',
+              })}`}
       </div>
 
       {reservation.booking.status === 'approval_pending' && (
         <button className="secondary-button full-width" type="button" onClick={switchToHost}>
           Open Host review <ArrowRight size={16} />
         </button>
+      )}
+
+      {reservation.booking.status === 'awaiting_deposit' && !deposit && (
+        <button
+          className="primary-button full-width"
+          disabled={busyAction !== null}
+          type="button"
+          onClick={() => void onFundDeposit()}
+        >
+          {busyAction === 'deposit' ? (
+            <>
+              <LoaderCircle className="spin" size={17} /> Submitting Testnet deposit…
+            </>
+          ) : (
+            <>
+              Fund Testnet deposit <Coins size={17} />
+            </>
+          )}
+        </button>
+      )}
+
+      {deposit &&
+        ['pending', 'reserved', 'submitted', 'reconciling'].includes(deposit.operation.status) && (
+          <div className="hedera-operation">
+            <span>Hedera operation · {deposit.operation.status}</span>
+            <p>
+              The transaction identity is reserved. Mirror Node decides the final result before the
+              Booking changes.
+            </p>
+            {deposit.operation.transactionUrl && (
+              <a href={deposit.operation.transactionUrl} rel="noreferrer" target="_blank">
+                View pending transaction <ExternalLink size={13} />
+              </a>
+            )}
+            <button
+              className="secondary-button full-width"
+              disabled={busyAction !== null}
+              type="button"
+              onClick={() => void onReconcileDeposit()}
+            >
+              {busyAction === 'reconcile' ? (
+                <>
+                  <LoaderCircle className="spin" size={16} /> Checking Mirror Node…
+                </>
+              ) : (
+                <>
+                  Reconcile status <RotateCcw size={15} />
+                </>
+              )}
+            </button>
+          </div>
+        )}
+
+      {deposit?.operation.status === 'failed' && (
+        <div className="hedera-operation failed">
+          <strong>Deposit failed safely</strong>
+          <p>The dates were released after Mirror Node confirmed the failure.</p>
+        </div>
+      )}
+
+      {deposit?.operation.status === 'confirmed' && (
+        <div className="hedera-operation confirmed">
+          <strong>
+            <CheckCircle2 size={15} /> Real Testnet evidence
+          </strong>
+          <p>
+            {formatAtomicUnits(deposit.escrow.amountAtomic)} test units funded · token{' '}
+            {deposit.escrow.tokenId}
+          </p>
+          <div className="evidence-links">
+            {deposit.operation.transactionUrl && (
+              <a href={deposit.operation.transactionUrl} rel="noreferrer" target="_blank">
+                HTS transfer <ExternalLink size={13} />
+              </a>
+            )}
+            {deposit.evidence.status === 'confirmed' && deposit.evidence.topicUrl && (
+              <a href={deposit.evidence.topicUrl} rel="noreferrer" target="_blank">
+                HCS #{deposit.evidence.sequenceNumber} <ExternalLink size={13} />
+              </a>
+            )}
+          </div>
+        </div>
       )}
     </div>
   );
@@ -1191,7 +1363,8 @@ function EmptyState({ icon, title, text }: { icon: ReactNode; title: string; tex
   );
 }
 
-function EvidencePanel() {
+function EvidencePanel({ deposit }: { deposit: DepositResult | null }) {
+  const hederaLive = deposit?.operation.status === 'confirmed';
   const evidence = [
     {
       icon: <Database size={18} />,
@@ -1217,9 +1390,16 @@ function EvidencePanel() {
     {
       icon: <Coins size={18} />,
       name: 'Hedera',
-      status: 'Phase 5',
-      tone: 'planned',
-      detail: 'Real Testnet deposit, HCS evidence, Mirror Node read-back',
+      status: hederaLive ? 'Live Testnet' : 'Testnet-ready',
+      tone: hederaLive ? 'live' : 'ready',
+      detail:
+        hederaLive && deposit
+          ? `${formatAtomicUnits(deposit.escrow.amountAtomic)} test units funded; HCS ${
+              deposit.evidence.status === 'confirmed'
+                ? `#${deposit.evidence.sequenceNumber}`
+                : 'evidence pending'
+            }`
+          : 'Native HTS, Mirror Node, and HCS adapters; live evidence not run yet',
     },
   ];
 

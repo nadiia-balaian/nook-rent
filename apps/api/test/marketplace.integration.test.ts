@@ -1,6 +1,11 @@
 import { randomUUID } from 'node:crypto';
 
-import { MarketplaceService } from '@nook-rent/core';
+import {
+  BookingDepositService,
+  type FinancialLedgerPort,
+  MarketplaceService,
+  type RentalEvidencePort,
+} from '@nook-rent/core';
 import {
   applyMigrations,
   createPostgresClient,
@@ -8,6 +13,7 @@ import {
   PostgresBookingQuoteRepository,
   PostgresBookingRepository,
   PostgresBookingRequestRepository,
+  PostgresDepositOperationRepository,
   PostgresListingApprovalPolicyRepository,
   PostgresListingRepository,
   PostgresMemberProfileRepository,
@@ -26,10 +32,12 @@ const NOW = '2026-07-25T10:00:00.000Z';
 describeWithDatabase('marketplace API tracer', () => {
   let sql: PostgresClient;
   let application: ReturnType<typeof createApi>;
+  let ledger: FakeLedger;
 
   beforeAll(async () => {
     sql = createPostgresClient(databaseUrl ?? '', { maxConnections: 5 });
     await applyMigrations(sql);
+    const bookings = new PostgresBookingRepository(sql);
     const marketplace = new MarketplaceService({
       profiles: new PostgresMemberProfileRepository(sql),
       listings: new PostgresListingRepository(sql),
@@ -38,13 +46,25 @@ describeWithDatabase('marketplace API tracer', () => {
       quotes: new PostgresBookingQuoteRepository(sql),
       holds: new PostgresReservationHoldRepository(sql),
       bookingRequests: new PostgresBookingRequestRepository(sql),
-      bookings: new PostgresBookingRepository(sql),
+      bookings,
       reputation: new PostgresRentalReputationRepository(sql),
       clock: { now: () => NOW },
       ids: { next: () => randomUUID() },
     });
+    ledger = new FakeLedger();
+    const deposits = new BookingDepositService({
+      bookings,
+      operations: new PostgresDepositOperationRepository(sql),
+      ledger,
+      evidence: new FakeEvidence(),
+      clock: { now: () => NOW },
+      ids: { next: () => randomUUID() },
+      escrowRecipientRef: '0.0.2002',
+    });
     application = createApi({
       marketplace,
+      deposits,
+      hederaTopicId: '0.0.8001',
       readiness: async () => {
         await sql`select 1`;
       },
@@ -58,6 +78,7 @@ describeWithDatabase('marketplace API tracer', () => {
         nook.rental_events,
         nook.payments,
         nook.escrows,
+        nook.operations,
         nook.bookings,
         nook.booking_requests,
         nook.reservation_holds,
@@ -137,6 +158,44 @@ describeWithDatabase('marketplace API tracer', () => {
         id: holdResponse.json().booking.id,
       },
     });
+
+    const depositRequest = {
+      method: 'POST' as const,
+      url: `/v1/bookings/${holdResponse.json().booking.id}/deposit`,
+      headers: {
+        'idempotency-key': 'api-hedera-deposit-request',
+      },
+    };
+    const depositResponse = await application.inject(depositRequest);
+    const depositRetry = await application.inject(depositRequest);
+
+    expect(depositResponse.statusCode).toBe(200);
+    expect(depositResponse.json()).toMatchObject({
+      operation: {
+        status: 'confirmed',
+        transactionId: '0.0.1001@1784980800.000000001',
+      },
+      escrow: {
+        status: 'funded',
+      },
+      payment: {
+        status: 'confirmed',
+      },
+      booking: {
+        status: 'confirmed',
+      },
+      hold: {
+        status: 'converted',
+      },
+      evidence: {
+        status: 'confirmed',
+        sequenceNumber: 14,
+        topicId: '0.0.8001',
+      },
+    });
+    expect(depositRetry.statusCode).toBe(200);
+    expect(depositRetry.json().idempotent).toBe(true);
+    expect(ledger.submissionCount).toBe(1);
 
     const conflictingGuest = await createProfile('guest', 'guest-conflicting');
     const conflictingQuote = await application.inject({
@@ -304,3 +363,33 @@ describeWithDatabase('marketplace API tracer', () => {
     `;
   }
 });
+
+class FakeLedger implements FinancialLedgerPort {
+  submissionCount = 0;
+
+  reserveTransactionId(): Promise<string> {
+    return Promise.resolve('0.0.1001@1784980800.000000001');
+  }
+
+  submitDeposit(): Promise<{ transactionId: string }> {
+    this.submissionCount += 1;
+    return Promise.resolve({ transactionId: '0.0.1001@1784980800.000000001' });
+  }
+
+  getTransactionStatus(): Promise<'confirmed'> {
+    return Promise.resolve('confirmed');
+  }
+}
+
+class FakeEvidence implements RentalEvidencePort {
+  reserveTransactionId(): Promise<string> {
+    return Promise.resolve('0.0.1001@1784980801.000000001');
+  }
+
+  publish(): Promise<{ transactionId: string; sequenceNumber: number }> {
+    return Promise.resolve({
+      transactionId: '0.0.1001@1784980801.000000001',
+      sequenceNumber: 14,
+    });
+  }
+}

@@ -4,7 +4,9 @@ import {
   DomainValidationError,
   InvalidStateTransitionError,
   type Booking,
+  type BookingDepositService,
   type BookingQuote,
+  type DepositWorkflowResult,
   type Listing,
   type ListingDetail,
   type MarketplaceService,
@@ -13,6 +15,7 @@ import {
   StayRange,
   TokenAmount,
 } from '@nook-rent/core';
+import { hederaTopicUrl, hederaTransactionUrl } from '@nook-rent/hedera';
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
 import { z, ZodError } from 'zod';
 
@@ -20,6 +23,8 @@ export interface CreateApiOptions {
   logger?: boolean;
   allowedOrigins?: string[];
   marketplace?: MarketplaceService;
+  deposits?: Pick<BookingDepositService, 'fundDeposit' | 'getDeposit' | 'reconcileDeposit'>;
+  hederaTopicId?: string;
   readiness?: () => Promise<void>;
 }
 
@@ -63,6 +68,7 @@ const listingBody = z.object({
 
 const listingParams = z.object({ listingId: uuid });
 const bookingParams = z.object({ bookingId: uuid });
+const operationParams = z.object({ operationId: uuid });
 const bookingRequestParams = z.object({ requestId: uuid });
 
 const listingSearchQuery = z.object({
@@ -113,6 +119,20 @@ function requireMarketplace(
   }
 
   return marketplace;
+}
+
+function requireDeposits(
+  deposits: CreateApiOptions['deposits'],
+  request: FastifyRequest,
+): NonNullable<CreateApiOptions['deposits']> {
+  if (!deposits) {
+    throw new DomainConflictError(
+      'hedera_unavailable',
+      `Hedera Testnet deposits are unavailable for request ${request.id}`,
+    );
+  }
+
+  return deposits;
 }
 
 function stayRangeDto(stayRange: StayRange) {
@@ -180,6 +200,55 @@ function bookingDto(booking: Booking) {
     depositAmountAtomic: booking.depositAmount.toString(),
     staySubtotal: undefined,
     depositAmount: undefined,
+  };
+}
+
+function depositDto(result: DepositWorkflowResult, topicId?: string) {
+  const { snapshot } = result;
+  const transactionId = snapshot.operation.providerTransactionId;
+  const evidenceTransactionId =
+    result.evidence.status === 'not_started' ? undefined : result.evidence.transactionId;
+
+  return {
+    idempotent: result.idempotent,
+    operation: {
+      id: snapshot.operation.id,
+      status: snapshot.operation.status,
+      transactionId,
+      ...(transactionId ? { transactionUrl: hederaTransactionUrl(transactionId) } : {}),
+      failureCode: snapshot.operation.failureCode,
+      attemptCount: snapshot.operation.attemptCount,
+      nextAttemptAt: snapshot.operation.nextAttemptAt,
+      createdAt: snapshot.operation.createdAt,
+      updatedAt: snapshot.operation.updatedAt,
+    },
+    escrow: {
+      id: snapshot.escrow.id,
+      tokenId: snapshot.escrow.tokenId,
+      amountAtomic: snapshot.escrow.amount.toString(),
+      status: snapshot.escrow.status,
+      fundedTransactionId: snapshot.escrow.fundedTransactionId,
+    },
+    payment: {
+      id: snapshot.payment.id,
+      tokenId: snapshot.payment.tokenId,
+      amountAtomic: snapshot.payment.amount.toString(),
+      status: snapshot.payment.status,
+    },
+    booking: bookingDto(snapshot.booking),
+    hold: holdDto(snapshot.hold),
+    evidence: {
+      ...result.evidence,
+      ...(evidenceTransactionId
+        ? { transactionUrl: hederaTransactionUrl(evidenceTransactionId) }
+        : {}),
+      ...(topicId
+        ? {
+            topicId,
+            topicUrl: hederaTopicUrl(topicId),
+          }
+        : {}),
+    },
   };
 }
 
@@ -337,6 +406,34 @@ export function createApi(options: CreateApiOptions = {}): FastifyInstance {
     const { bookingId } = bookingParams.parse(request.params);
     const booking = await requireMarketplace(options.marketplace, request).getBooking(bookingId);
     return bookingDto(booking);
+  });
+
+  app.post('/v1/bookings/:bookingId/deposit', async (request, reply) => {
+    const { bookingId } = bookingParams.parse(request.params);
+    const idempotencyKey = z.string().min(8).max(200).parse(request.headers['idempotency-key']);
+    const result = await requireDeposits(options.deposits, request).fundDeposit({
+      bookingId,
+      idempotencyKey,
+    });
+
+    return reply
+      .code(result.snapshot.operation.status === 'confirmed' ? 200 : 202)
+      .send(depositDto(result, options.hederaTopicId));
+  });
+
+  app.get('/v1/operations/:operationId', async (request) => {
+    const { operationId } = operationParams.parse(request.params);
+    const result = await requireDeposits(options.deposits, request).getDeposit(operationId);
+    return depositDto(result, options.hederaTopicId);
+  });
+
+  app.post('/v1/operations/:operationId/reconcile', async (request, reply) => {
+    const { operationId } = operationParams.parse(request.params);
+    const result = await requireDeposits(options.deposits, request).reconcileDeposit(operationId);
+
+    return reply
+      .code(result.snapshot.operation.status === 'confirmed' ? 200 : 202)
+      .send(depositDto(result, options.hederaTopicId));
   });
 
   app.setNotFoundHandler((request, reply) =>

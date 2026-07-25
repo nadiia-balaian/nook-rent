@@ -116,3 +116,54 @@ export interface Booking {
   createdAt: string;
   updatedAt: string;
 }
+
+export type ExternalOperationStatus =
+  'pending' | 'reserved' | 'submitted' | 'confirmed' | 'failed' | 'reconciling';
+
+export interface ExternalOperation {
+  id: string;
+  kind: 'hedera_deposit';
+  idempotencyKey: string;
+  aggregateType: 'booking';
+  aggregateId: string;
+  provider: 'hedera';
+  providerTransactionId?: string;
+  status: ExternalOperationStatus;
+  requestPayload: Record<string, string | number | boolean | null>;
+  providerResponse?: Record<string, string | number | boolean | null>;
+  failureCode?: string;
+  attemptCount: number;
+  nextAttemptAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type EscrowStatus =
+  'pending' | 'submitted' | 'funded' | 'release_pending' | 'released' | 'refunded' | 'failed';
+
+export interface Escrow {
+  id: string;
+  bookingId: string;
+  tokenId: string;
+  amount: TokenAmount;
+  status: EscrowStatus;
+  fundedTransactionId?: string;
+  releaseTransactionId?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type PaymentStatus = 'pending' | 'submitted' | 'confirmed' | 'failed';
+
+export interface Payment {
+  id: string;
+  bookingId: string;
+  kind: 'deposit';
+  tokenId: string;
+  amount: TokenAmount;
+  recipientRef: string;
+  status: PaymentStatus;
+  operationId: string;
+  createdAt: string;
+  updatedAt: string;
+}
