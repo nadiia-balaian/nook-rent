@@ -18,6 +18,14 @@ issues.
 A person with a Nook.rent profile. A Member may act as a Host, a Guest, or both.
 A Member is not a wallet, an agent, or a blockchain account.
 
+### Member Session
+
+An opaque, server-validated authorization session for one active browser
+session. A Member Session begins anonymous and becomes bound to a Member only
+after a valid World ID proof. Host and Guest roles may share that verification
+inside the same Member Session. A new browser or private session must prove
+World ID again before it can access the Member.
+
 ### Host
 
 A Member offering a home for a temporary stay. A Host controls the Listing,

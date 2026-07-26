@@ -23,6 +23,7 @@ import {
   PostgresDepositOperationRepository,
   PostgresListingApprovalPolicyRepository,
   PostgresListingRepository,
+  PostgresMemberSessionRepository,
   PostgresMemberProfileRepository,
   PostgresRentalReputationRepository,
   PostgresReservationHoldRepository,
@@ -55,6 +56,7 @@ const serverEnvironment = parseServerEnvironment(process.env);
 const databaseEnvironment = parseDatabaseEnvironment(process.env);
 const sql = createPostgresClient(databaseEnvironment.connectionString);
 const bookings = new PostgresBookingRepository(sql);
+const memberSessions = new PostgresMemberSessionRepository(sql);
 const marketplace = new MarketplaceService({
   profiles: new PostgresMemberProfileRepository(sql),
   listings: new PostgresListingRepository(sql),
@@ -159,6 +161,7 @@ const app = createApi({
   allowedOrigins: serverEnvironment.allowedOrigins,
   marketplace,
   marketplaceAgents,
+  memberSessions,
   ...(deposits ? { deposits } : {}),
   ...(hederaEnvironment ? { hederaTopicId: hederaEnvironment.topicId.toString() } : {}),
   ...(humanBackedAuthorization && worldEnvironment

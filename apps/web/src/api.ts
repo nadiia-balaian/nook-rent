@@ -1,4 +1,5 @@
 const API_BASE_URL = (import.meta.env.VITE_API_URL ?? 'http://localhost:3100').replace(/\/$/, '');
+let memberSessionToken: string | null = null;
 
 export interface ApiErrorEnvelope {
   error: {
@@ -170,6 +171,18 @@ export interface WorldConnection {
   onchainSignal: NonNullable<ReservationResult['onchainSignal']>;
 }
 
+export interface MemberSession {
+  id: string;
+  profileId?: string;
+  humanVerified: boolean;
+  expiresAt: string;
+}
+
+export interface CreatedMemberSession {
+  token: string;
+  session: MemberSession;
+}
+
 export interface WorldIdMemberConfig {
   appId: `app_${string}`;
   rpId: `rp_${string}`;
@@ -191,6 +204,7 @@ export interface WorldIdMemberVerification {
   humanVerified: true;
   environment: 'production' | 'staging' | 'sandbox';
   status: 'created' | 'existing' | 'idempotent';
+  profileId?: string;
 }
 
 export type WorldIdMemberStatus =
@@ -388,6 +402,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     ...init,
     headers: {
       accept: 'application/json',
+      ...(memberSessionToken ? { authorization: `Bearer ${memberSessionToken}` } : {}),
       ...(init?.body ? { 'content-type': 'application/json' } : {}),
       ...init?.headers,
     },
@@ -427,8 +442,19 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return (await response.json()) as T;
 }
 
+export function setMemberSessionToken(token: string | null): void {
+  memberSessionToken = token;
+}
+
 export const nookApi = {
   readiness: () => request<{ service: string; status: 'ready' }>('/ready'),
+
+  createMemberSession: () =>
+    request<CreatedMemberSession>('/v1/member-sessions', {
+      method: 'POST',
+    }),
+
+  currentMemberSession: () => request<MemberSession>('/v1/member-session'),
 
   createWalletChallenge: (address: string) =>
     request<WalletChallenge>('/v1/wallet-verification/challenge', {
@@ -442,28 +468,25 @@ export const nookApi = {
       body: JSON.stringify(input),
     }),
 
-  connectWorldAgent: (profileId: string) =>
+  connectWorldAgent: () =>
     request<WorldConnection>('/v1/agents/guest/world-connection', {
       method: 'POST',
-      body: JSON.stringify({ profileId }),
+      body: JSON.stringify({}),
     }),
 
   memberWorldIdConfig: () => request<WorldIdMemberConfig>('/v1/world-id/member/config'),
 
-  memberWorldIdStatus: (profileId: string) =>
-    request<WorldIdMemberStatus>(
-      `/v1/world-id/member/status?profileId=${encodeURIComponent(profileId)}`,
-    ),
+  memberWorldIdStatus: () => request<WorldIdMemberStatus>('/v1/world-id/member/status'),
 
   createMemberWorldIdRpContext: () =>
     request<WorldIdRpContext>('/v1/world-id/member/rp-signature', {
       method: 'POST',
     }),
 
-  verifyMemberWorldId: (input: { profileId: string; proof: unknown }) =>
+  verifyMemberWorldId: (proof: unknown) =>
     request<WorldIdMemberVerification>('/v1/world-id/member/verify', {
       method: 'POST',
-      body: JSON.stringify(input),
+      body: JSON.stringify({ proof }),
     }),
 
   createHostAgentDraft: (input: {
@@ -489,14 +512,13 @@ export const nookApi = {
       body: JSON.stringify({ query }),
     }),
 
-  secureBestMatch: (input: { guestProfileId: string; query: string; idempotencyKey: string }) =>
+  secureBestMatch: (input: { query: string; idempotencyKey: string }) =>
     request<AgentSecureMatchResult>('/v1/agents/guest/secure-match', {
       method: 'POST',
       headers: {
         'idempotency-key': input.idempotencyKey,
       },
       body: JSON.stringify({
-        guestProfileId: input.guestProfileId,
         query: input.query,
       }),
     }),
@@ -519,12 +541,7 @@ export const nookApi = {
     return request<{ items: Listing[] }>(`/v1/listings?${query.toString()}`);
   },
 
-  createQuote: (input: {
-    listingId: string;
-    guestProfileId: string;
-    checkIn: string;
-    checkOut: string;
-  }) =>
+  createQuote: (input: { listingId: string; checkIn: string; checkOut: string }) =>
     request<BookingQuote>('/v1/booking-quotes', {
       method: 'POST',
       body: JSON.stringify(input),
@@ -539,11 +556,7 @@ export const nookApi = {
       body: JSON.stringify({ quoteId: input.quoteId }),
     }),
 
-  decideBookingRequest: (input: {
-    requestId: string;
-    hostProfileId: string;
-    decision: 'approved' | 'rejected';
-  }) =>
+  decideBookingRequest: (input: { requestId: string; decision: 'approved' | 'rejected' }) =>
     request<{
       bookingRequest: ReservationResult['bookingRequest'];
       booking: Booking;
@@ -551,13 +564,11 @@ export const nookApi = {
     }>(`/v1/booking-requests/${input.requestId}/decision`, {
       method: 'POST',
       body: JSON.stringify({
-        hostProfileId: input.hostProfileId,
         decision: input.decision,
       }),
     }),
 
   createListing: (input: {
-    hostProfileId: string;
     title: string;
     description: string;
     city: string;

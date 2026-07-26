@@ -45,6 +45,7 @@ import {
   type HostAgentDraftResult,
   type Listing,
   type ListingDetail,
+  type MemberSession,
   NookApiError,
   nookApi,
   type ReservationResult,
@@ -54,6 +55,7 @@ import {
   type WorldIdMemberConfig,
   type WorldIdMemberVerification,
   type WorldIdRpContext,
+  setMemberSessionToken,
 } from './api.js';
 import { DEFAULT_GUEST_QUERY, DEFAULT_SEARCH, DEMO_PROFILES, type DemoGuestKey } from './demo.js';
 import { WalletAccountMenu } from './WalletEvidencePanel.js';
@@ -112,6 +114,16 @@ const LISTING_IMAGES = [
   '/images/nook-alfama.jpg',
   '/images/nook-graca.jpg',
 ] as const;
+
+const MEMBER_SESSION_STORAGE_KEY = 'nook.member-session.v1';
+
+function memberSessionStorage(): Storage | null {
+  try {
+    return typeof window.sessionStorage?.getItem === 'function' ? window.sessionStorage : null;
+  } catch {
+    return null;
+  }
+}
 
 function imageForListing(listing: Listing | null, index = 0): string {
   if (!listing) return LISTING_IMAGES[0];
@@ -181,7 +193,14 @@ function friendlyError(error: NookApiError): string {
     case 'world_id_provider_unavailable':
       return 'World ID verification is temporarily unavailable. Please try again.';
     case 'world_id_already_bound':
-      return 'This World ID is already connected to another Member profile.';
+      return 'This session is already connected to another World identity.';
+    case 'member_session_required':
+    case 'member_session_invalid':
+      return 'Your private session expired. Refresh the page to start a new one.';
+    case 'member_session_unavailable':
+      return 'Private sessions are temporarily unavailable. Please try again.';
+    case 'member_session_profile_mismatch':
+      return 'This action belongs to a different signed-in Member.';
     case 'agent_not_registered':
       return 'This human-backed Agent is not registered in Agent0 yet.';
     case 'agent_registration_inactive':
@@ -228,8 +247,7 @@ export function App() {
   const [memberWorldIdVerification, setMemberWorldIdVerification] =
     useState<WorldIdMemberVerification | null>(null);
   const [walletEvidence, setWalletEvidence] = useState<WalletEvidence | null>(null);
-
-  const selectedGuest = DEMO_PROFILES[guestKey];
+  const [memberSession, setMemberSession] = useState<MemberSession | null>(null);
 
   const checkApi = async () => {
     setApiStatus('checking');
@@ -246,20 +264,70 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    if (screen !== 'identity') return;
+    let active = true;
+
+    void (async () => {
+      const storage = memberSessionStorage();
+      const storedToken = storage?.getItem(MEMBER_SESSION_STORAGE_KEY);
+
+      if (storedToken) {
+        setMemberSessionToken(storedToken);
+        try {
+          const restored = await nookApi.currentMemberSession();
+          if (active) setMemberSession(restored);
+          return;
+        } catch (caught) {
+          if (!(caught instanceof NookApiError) || caught.status !== 401) {
+            if (active) setApiStatus('unavailable');
+            return;
+          }
+          storage?.removeItem(MEMBER_SESSION_STORAGE_KEY);
+          setMemberSessionToken(null);
+        }
+      }
+
+      try {
+        const created = await nookApi.createMemberSession();
+        if (!active) return;
+        storage?.setItem(MEMBER_SESSION_STORAGE_KEY, created.token);
+        setMemberSessionToken(created.token);
+        setMemberSession(created.session);
+      } catch {
+        if (active) setApiStatus('unavailable');
+      }
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (screen !== 'identity' || !memberSession) return;
 
     let active = true;
-    const profileId = role === 'host' ? DEMO_PROFILES.host.id : selectedGuest.id;
     setBusyAction('connect-world-id');
     setError(null);
 
     void (async () => {
       try {
-        const status = await nookApi.memberWorldIdStatus(profileId);
+        const status = await nookApi.memberWorldIdStatus();
 
         if (!active || !status.humanVerified) return;
 
         setMemberWorldIdVerification(status);
+        if (status.profileId) {
+          const profileId = status.profileId;
+          setMemberSession((current) =>
+            current
+              ? {
+                  ...current,
+                  profileId,
+                  humanVerified: true,
+                }
+              : current,
+          );
+        }
 
         if (role === 'host') {
           setScreen('host-create');
@@ -267,7 +335,7 @@ export function App() {
           return;
         }
 
-        const connection = await nookApi.connectWorldAgent(selectedGuest.id);
+        const connection = await nookApi.connectWorldAgent();
         if (!active) return;
 
         setWorldConnection(connection);
@@ -288,7 +356,7 @@ export function App() {
     return () => {
       active = false;
     };
-  }, [role, screen, selectedGuest.id]);
+  }, [memberSession?.id, role, screen]);
 
   const navigate = (next: Screen) => {
     setError(null);
@@ -348,9 +416,7 @@ export function App() {
   };
 
   const connectWorldAgent = async () => {
-    const result = await runAction('connect-world', () =>
-      nookApi.connectWorldAgent(selectedGuest.id),
-    );
+    const result = await runAction('connect-world', () => nookApi.connectWorldAgent());
     if (result) setWorldConnection(result);
   };
 
@@ -359,8 +425,7 @@ export function App() {
     setError(null);
 
     try {
-      const profileId = role === 'host' ? DEMO_PROFILES.host.id : selectedGuest.id;
-      const status = await nookApi.memberWorldIdStatus(profileId);
+      const status = await nookApi.memberWorldIdStatus();
 
       if (status.humanVerified) {
         setMemberWorldIdVerification(status);
@@ -390,11 +455,10 @@ export function App() {
     setError(null);
 
     try {
-      const verification = await nookApi.verifyMemberWorldId({
-        profileId: role === 'host' ? DEMO_PROFILES.host.id : selectedGuest.id,
-        proof,
-      });
+      const verification = await nookApi.verifyMemberWorldId(proof);
       setMemberWorldIdVerification(verification);
+      const refreshedSession = await nookApi.currentMemberSession();
+      setMemberSession(refreshedSession);
     } catch (caught) {
       const apiError =
         caught instanceof NookApiError
@@ -467,7 +531,6 @@ export function App() {
     const result = await runAction('quote', () =>
       nookApi.createQuote({
         listingId: listing.id,
-        guestProfileId: selectedGuest.id,
         checkIn: search.checkIn,
         checkOut: search.checkOut,
       }),
@@ -481,9 +544,8 @@ export function App() {
   const secureBestMatch = async () => {
     const result: AgentSecureMatchResult | undefined = await runAction('reserve', () =>
       nookApi.secureBestMatch({
-        guestProfileId: selectedGuest.id,
         query: guestQuery,
-        idempotencyKey: `nook-agent-${selectedGuest.id}-${search.checkIn}-${search.checkOut}`,
+        idempotencyKey: `nook-agent-${memberSession?.id ?? 'pending'}-${search.checkIn}-${search.checkOut}`,
       }),
     );
 
@@ -569,7 +631,6 @@ export function App() {
     const result = await runAction('decide', () =>
       nookApi.decideBookingRequest({
         requestId: reservation.bookingRequest.id,
-        hostProfileId: DEMO_PROFILES.host.id,
         decision,
       }),
     );
@@ -642,7 +703,6 @@ export function App() {
   const createListing = async () => {
     const result = await runAction('create-listing', () =>
       nookApi.createListing({
-        hostProfileId: DEMO_PROFILES.host.id,
         title: listingDraft.title,
         description: listingDraft.description,
         city: listingDraft.city,
@@ -690,7 +750,13 @@ export function App() {
   const renderScreen = () => {
     switch (screen) {
       case 'splash':
-        return <SplashScreen apiStatus={apiStatus} onStart={() => navigate('role')} />;
+        return (
+          <SplashScreen
+            apiStatus={apiStatus}
+            onStart={() => navigate('role')}
+            sessionReady={memberSession !== null}
+          />
+        );
       case 'role':
         return <RoleScreen onBack={() => navigate('splash')} onSelect={selectRole} />;
       case 'identity':
@@ -884,7 +950,7 @@ export function App() {
         </div>
       </main>
 
-      {memberWorldIdConfig && memberWorldIdRpContext && (
+      {memberSession && memberWorldIdConfig && memberWorldIdRpContext && (
         <IDKitRequestWidget
           action={memberWorldIdConfig.action}
           action_description="Verify a human Member before using protected Nook marketplace actions"
@@ -897,7 +963,7 @@ export function App() {
           onSuccess={() => setMemberWorldIdOpen(false)}
           open={memberWorldIdOpen}
           preset={proofOfHuman({
-            signal: role === 'host' ? DEMO_PROFILES.host.id : selectedGuest.id,
+            signal: memberSession.id,
           })}
           rp_context={memberWorldIdRpContext}
         />
@@ -983,7 +1049,15 @@ function NookMark({ small = false }: { small?: boolean }) {
   );
 }
 
-function SplashScreen({ apiStatus, onStart }: { apiStatus: ApiStatus; onStart: () => void }) {
+function SplashScreen({
+  apiStatus,
+  onStart,
+  sessionReady,
+}: {
+  apiStatus: ApiStatus;
+  onStart: () => void;
+  sessionReady: boolean;
+}) {
   return (
     <section className="splash-screen">
       <div className="splash-copy">
@@ -997,8 +1071,21 @@ function SplashScreen({ apiStatus, onStart }: { apiStatus: ApiStatus; onStart: (
           Sublet your place to a verified traveller while you’re away—or find a real home for your
           next 3–90 night stay.
         </p>
-        <button className="primary-button large" type="button" onClick={onStart}>
-          Get started <ArrowRight size={18} />
+        <button
+          className="primary-button large"
+          disabled={!sessionReady}
+          type="button"
+          onClick={onStart}
+        >
+          {sessionReady ? (
+            <>
+              Get started <ArrowRight size={18} />
+            </>
+          ) : (
+            <>
+              <LoaderCircle className="spin" size={17} /> Preparing your session
+            </>
+          )}
         </button>
         <div className={`splash-api-note ${apiStatus}`}>
           {apiStatus === 'checking' && <LoaderCircle className="spin" size={14} />}
@@ -1757,8 +1844,8 @@ function GuestSearchScreen({
         <div>
           <span className="field-label">Demo Rental Reputation profile</span>
           <p>
-            Seeded UI data until the HCS projection is built. Changing persona requires its own
-            Member verification.
+            Seeded UI data until the HCS projection is built. Your verified Member session remains
+            the source of identity.
           </p>
         </div>
         <div className="profile-options">

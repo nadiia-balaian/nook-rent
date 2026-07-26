@@ -12,6 +12,7 @@ import type {
   ListingDetail,
   ReservationResult,
 } from './api.js';
+import { setMemberSessionToken } from './api.js';
 import { ReownProvider } from './reown.js';
 
 vi.mock('@worldcoin/idkit', () => ({
@@ -220,7 +221,16 @@ function installMarketplaceApi(
   options: { requireWorldAgent?: boolean } = {},
 ) {
   const initialReservation = reservation(mode);
-  const verifiedMemberProfiles = new Set<string>();
+  const sessions = new Map<
+    string,
+    {
+      id: string;
+      profileId?: string;
+      humanVerified: boolean;
+      expiresAt: string;
+    }
+  >();
+  let sessionCount = 0;
   let createdListingDetail: ListingDetail | null = null;
   vi.stubGlobal('scrollTo', vi.fn());
 
@@ -230,9 +240,47 @@ function installMarketplaceApi(
       const rawUrl =
         typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
       const url = new URL(rawUrl);
+      const authorization = new Headers(init?.headers).get('authorization');
+      const sessionToken = authorization?.replace(/^Bearer\s+/, '');
+      const session = sessionToken ? sessions.get(sessionToken) : undefined;
 
       if (url.pathname === '/ready') {
         return Promise.resolve(jsonResponse({ service: 'nook-api', status: 'ready' }));
+      }
+      if (url.pathname === '/v1/member-sessions' && init?.method === 'POST') {
+        sessionCount += 1;
+        const token = `nook_ms_test_session_token_${String(sessionCount).padStart(12, '0')}`;
+        const created = {
+          id: `90000000-0000-4000-8000-${String(sessionCount).padStart(12, '0')}`,
+          humanVerified: false,
+          expiresAt: '2099-07-26T00:00:00.000Z',
+        };
+        sessions.set(token, created);
+        return Promise.resolve(
+          jsonResponse(
+            {
+              token,
+              session: created,
+            },
+            201,
+          ),
+        );
+      }
+      if (url.pathname === '/v1/member-session') {
+        return Promise.resolve(
+          session
+            ? jsonResponse(session)
+            : jsonResponse(
+                {
+                  error: {
+                    code: 'member_session_required',
+                    message: 'A Member session is required',
+                    requestId: 'test-request',
+                  },
+                },
+                401,
+              ),
+        );
       }
       if (url.pathname === '/v1/world-id/member/config') {
         return Promise.resolve(
@@ -245,16 +293,16 @@ function installMarketplaceApi(
         );
       }
       if (url.pathname === '/v1/world-id/member/status') {
-        const profileId = url.searchParams.get('profileId');
         return Promise.resolve(
           jsonResponse(
-            profileId && verifiedMemberProfiles.has(profileId)
+            session?.humanVerified
               ? {
                   provider: 'world_id',
                   credential: 'proof_of_human',
                   humanVerified: true,
                   environment: 'staging',
                   status: 'existing',
+                  profileId: session.profileId,
                 }
               : {
                   humanVerified: false,
@@ -274,18 +322,19 @@ function installMarketplaceApi(
         );
       }
       if (url.pathname === '/v1/world-id/member/verify') {
-        if (typeof init?.body !== 'string') {
-          throw new Error('Expected JSON request body for Member verification');
+        if (!session) {
+          throw new Error('Expected an authenticated test Member session');
         }
-        const body = JSON.parse(init.body) as { profileId: string };
-        verifiedMemberProfiles.add(body.profileId);
+        session.humanVerified = true;
+        session.profileId = quote.guestProfileId;
         return Promise.resolve(
           jsonResponse({
             provider: 'world_id',
             credential: 'proof_of_human',
             humanVerified: true,
             environment: 'staging',
-            status: 'created',
+            status: 'existing',
+            profileId: session.profileId,
           }),
         );
       }
@@ -542,6 +591,10 @@ function installMarketplaceApi(
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+  if (typeof window.sessionStorage?.clear === 'function') {
+    window.sessionStorage.clear();
+  }
+  setMemberSessionToken(null);
 });
 
 describe('Nook marketplace demo', () => {
@@ -552,7 +605,7 @@ describe('Nook marketplace demo', () => {
   }
 
   async function enterGuestSearch(user: ReturnType<typeof userEvent.setup>) {
-    await user.click(screen.getByRole('button', { name: 'Get started' }));
+    await user.click(await screen.findByRole('button', { name: 'Get started' }));
     await user.click(screen.getByRole('button', { name: /I’m looking for a place/ }));
     await completeMemberWorldId(user);
     await user.click(screen.getByRole('button', { name: 'Connect World-backed Agent' }));
@@ -563,7 +616,7 @@ describe('Nook marketplace demo', () => {
   }
 
   async function enterHostCreate(user: ReturnType<typeof userEvent.setup>) {
-    await user.click(screen.getByRole('button', { name: 'Get started' }));
+    await user.click(await screen.findByRole('button', { name: 'Get started' }));
     await user.click(screen.getByRole('button', { name: /I want to rent out my place/ }));
     await completeMemberWorldId(user);
     await user.click(screen.getByRole('button', { name: 'Continue' }));
@@ -583,7 +636,7 @@ describe('Nook marketplace demo', () => {
       }),
     ).toBeTruthy();
     expect(screen.getByText('P2P sublet marketplace for digital nomads')).toBeTruthy();
-    await user.click(screen.getByRole('button', { name: 'Get started' }));
+    await user.click(await screen.findByRole('button', { name: 'Get started' }));
     expect(screen.getByRole('heading', { name: 'A familiar welcome.' })).toBeTruthy();
     expect(screen.getByRole('button', { name: /I want to rent out my place/ })).toBeTruthy();
     expect(screen.getByRole('button', { name: /I’m looking for a place/ })).toBeTruthy();
@@ -600,7 +653,7 @@ describe('Nook marketplace demo', () => {
     await completeMemberWorldId(user);
 
     await user.click(screen.getByRole('button', { name: 'Restart' }));
-    await user.click(screen.getByRole('button', { name: 'Get started' }));
+    await user.click(await screen.findByRole('button', { name: 'Get started' }));
     await user.click(screen.getByRole('button', { name: /I’m looking for a place/ }));
 
     expect(await screen.findByRole('heading', { name: 'Where to?' })).toBeTruthy();
@@ -619,11 +672,35 @@ describe('Nook marketplace demo', () => {
     await completeMemberWorldId(user);
 
     await user.click(screen.getByRole('button', { name: 'Restart' }));
-    await user.click(screen.getByRole('button', { name: 'Get started' }));
+    await user.click(await screen.findByRole('button', { name: 'Get started' }));
     await user.click(screen.getByRole('button', { name: /I want to rent out my place/ }));
 
     expect(await screen.findByRole('heading', { name: 'Show us your nook.' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Verify with World ID' })).toBeNull();
+  });
+
+  it('requires World ID again in a fresh browser Member session', async () => {
+    installMarketplaceApi('automatic');
+    const user = userEvent.setup();
+
+    renderApp();
+
+    await user.click(await screen.findByRole('button', { name: 'Get started' }));
+    await user.click(screen.getByRole('button', { name: /I want to rent out my place/ }));
+    await completeMemberWorldId(user);
+
+    cleanup();
+    if (typeof window.sessionStorage?.clear === 'function') {
+      window.sessionStorage.clear();
+    }
+    setMemberSessionToken(null);
+    renderApp();
+
+    await user.click(await screen.findByRole('button', { name: 'Get started' }));
+    await user.click(screen.getByRole('button', { name: /I want to rent out my place/ }));
+
+    expect(await screen.findByRole('button', { name: 'Verify with World ID' })).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: 'Show us your nook.' })).toBeNull();
   });
 
   it('completes automatic approval and Testnet deposit confirmation', async () => {
@@ -659,9 +736,8 @@ describe('Nook marketplace demo', () => {
     await enterGuestSearch(user);
 
     await user.click(screen.getByRole('button', { name: /Jo/ }));
-    await completeMemberWorldId(user);
-    await user.click(screen.getByRole('button', { name: 'Connect World-backed Agent' }));
-    await user.click(await screen.findByRole('button', { name: 'Continue' }));
+    expect(await screen.findByRole('heading', { name: 'Where to?' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Verify with World ID' })).toBeNull();
     await user.click(screen.getByRole('button', { name: 'Find available nooks' }));
     await user.click(await screen.findByRole('button', { name: 'View nook' }));
     await user.click(await screen.findByRole('button', { name: 'Request this nook' }));
@@ -683,7 +759,7 @@ describe('Nook marketplace demo', () => {
     const user = userEvent.setup();
 
     renderApp();
-    await user.click(screen.getByRole('button', { name: 'Get started' }));
+    await user.click(await screen.findByRole('button', { name: 'Get started' }));
     await user.click(screen.getByRole('button', { name: /I’m looking for a place/ }));
     await completeMemberWorldId(user);
     await user.click(screen.getByRole('button', { name: 'Connect World-backed Agent' }));
@@ -699,7 +775,7 @@ describe('Nook marketplace demo', () => {
     const user = userEvent.setup();
 
     renderApp();
-    await user.click(screen.getByRole('button', { name: 'Get started' }));
+    await user.click(await screen.findByRole('button', { name: 'Get started' }));
     await user.click(screen.getByRole('button', { name: /I’m looking for a place/ }));
 
     expect(screen.getByRole('button', { name: 'Verify with World ID' })).toBeTruthy();
@@ -717,7 +793,7 @@ describe('Nook marketplace demo', () => {
     const user = userEvent.setup();
 
     renderApp();
-    await user.click(screen.getByRole('button', { name: 'Get started' }));
+    await user.click(await screen.findByRole('button', { name: 'Get started' }));
     await user.click(screen.getByRole('button', { name: /I want to rent out my place/ }));
 
     expect(screen.getByRole('button', { name: 'Verify with World ID' })).toBeTruthy();

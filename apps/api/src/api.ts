@@ -1,3 +1,5 @@
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
+
 import cors from '@fastify/cors';
 import {
   AgentRegistrationError,
@@ -99,12 +101,58 @@ export interface CreateApiOptions {
       verifiedAt: string;
     }): Promise<'created' | 'idempotent'>;
   };
+  memberSessions?: {
+    create(input: { id: string; tokenHash: string; expiresAt: string }): Promise<MemberSession>;
+    findByTokenHash(input: { tokenHash: string; now: string }): Promise<MemberSession | undefined>;
+    authenticateWorldId(input: {
+      sessionId: string;
+      newProfileId: string;
+      newProfilePublicRef: string;
+      provider: 'world_id';
+      credential: 'proof_of_human';
+      action: string;
+      environment: 'production' | 'staging' | 'sandbox';
+      protocolVersion: '3.0' | '4.0';
+      nullifierDecimal: string;
+      verifiedAt: string;
+    }): Promise<{
+      session: MemberSession;
+      status: 'created' | 'existing' | 'idempotent';
+    }>;
+  };
   worldResourceUri?: string;
   agentRegistrationSignals?: OnchainSignalPort;
   requiredAgentCapability?: string;
   walletEvidence?: Pick<WalletEvidenceService, 'createChallenge' | 'verifyWalletEvidence'>;
   readiness?: () => Promise<void>;
 }
+
+interface MemberSession {
+  id: string;
+  profileId?: string;
+  humanVerified: boolean;
+  worldVerifiedAt?: string;
+  expiresAt: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+class MemberSessionError extends Error {
+  constructor(
+    readonly reason:
+      | 'member_session_invalid'
+      | 'member_session_profile_mismatch'
+      | 'member_session_required'
+      | 'member_session_unavailable',
+    message: string,
+    readonly statusCode: 401 | 403 | 503,
+  ) {
+    super(message);
+    this.name = 'MemberSessionError';
+  }
+}
+
+const MEMBER_SESSION_LIFETIME_MILLISECONDS = 30 * 24 * 60 * 60 * 1000;
 
 const uuid = z.uuid();
 const localDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
@@ -117,7 +165,7 @@ const profileBody = z.object({
 });
 
 const listingBody = z.object({
-  hostProfileId: uuid,
+  hostProfileId: uuid.optional(),
   title: z.string().trim().min(3).max(140),
   description: z.string().trim().min(1).max(5000),
   city: z.string().trim().min(1).max(120),
@@ -160,7 +208,7 @@ const listingSearchQuery = z.object({
 
 const quoteBody = z.object({
   listingId: uuid,
-  guestProfileId: uuid,
+  guestProfileId: uuid.optional(),
   checkIn: localDate,
   checkOut: localDate,
 });
@@ -171,19 +219,19 @@ const holdBody = z.object({
 
 const worldIdProofBody = z
   .object({
-    profileId: uuid,
+    profileId: uuid.optional(),
     proof: z.unknown(),
   })
   .strict();
 
 const worldIdStatusQuery = z
   .object({
-    profileId: uuid,
+    profileId: uuid.optional(),
   })
   .strict();
 
 const decisionBody = z.object({
-  hostProfileId: uuid,
+  hostProfileId: uuid.optional(),
   decision: z.enum(['approved', 'rejected']),
 });
 
@@ -220,7 +268,7 @@ const guestAgentSearchBody = z
 
 const worldConnectionBody = z
   .object({
-    profileId: uuid,
+    profileId: uuid.optional(),
   })
   .strict();
 
@@ -249,7 +297,7 @@ const walletEvidenceBody = z
 
 const guestAgentSecureMatchBody = z
   .object({
-    guestProfileId: uuid,
+    guestProfileId: uuid.optional(),
     query: z.string().trim().min(3).max(1_000),
   })
   .strict();
@@ -263,6 +311,110 @@ function errorEnvelope(request: FastifyRequest, code: string, message: string, d
       ...(details === undefined ? {} : { details }),
     },
   };
+}
+
+function hashMemberSessionToken(token: string): string {
+  return createHash('sha256').update(token, 'utf8').digest('hex');
+}
+
+function memberSessionDto(session: MemberSession) {
+  return {
+    id: session.id,
+    ...(session.profileId ? { profileId: session.profileId } : {}),
+    humanVerified: session.humanVerified,
+    expiresAt: session.expiresAt,
+  };
+}
+
+function requireMemberSessionRepository(
+  repository: CreateApiOptions['memberSessions'],
+  request: FastifyRequest,
+): NonNullable<CreateApiOptions['memberSessions']> {
+  if (!repository) {
+    throw new MemberSessionError(
+      'member_session_unavailable',
+      `Member sessions are unavailable for request ${request.id}`,
+      503,
+    );
+  }
+
+  return repository;
+}
+
+function bearerToken(request: FastifyRequest): string {
+  const authorization = request.headers.authorization;
+
+  if (typeof authorization !== 'string' || !authorization.startsWith('Bearer ')) {
+    throw new MemberSessionError('member_session_required', 'A Member session is required', 401);
+  }
+
+  const token = authorization.slice('Bearer '.length).trim();
+  if (!/^nook_ms_[A-Za-z0-9_-]{32,}$/.test(token)) {
+    throw new MemberSessionError(
+      'member_session_invalid',
+      'The Member session token is invalid',
+      401,
+    );
+  }
+
+  return token;
+}
+
+async function requireMemberSession(
+  repository: CreateApiOptions['memberSessions'],
+  request: FastifyRequest,
+): Promise<MemberSession> {
+  const token = bearerToken(request);
+  const session = await requireMemberSessionRepository(repository, request).findByTokenHash({
+    tokenHash: hashMemberSessionToken(token),
+    now: new Date().toISOString(),
+  });
+
+  if (!session) {
+    throw new MemberSessionError(
+      'member_session_invalid',
+      'The Member session is invalid or expired',
+      401,
+    );
+  }
+
+  return session;
+}
+
+async function requireAuthenticatedMemberSession(input: {
+  repository: CreateApiOptions['memberSessions'];
+  request: FastifyRequest;
+  claimedProfileId?: string;
+}): Promise<{ session: MemberSession; profileId: string }> {
+  const session = await requireMemberSession(input.repository, input.request);
+
+  if (!session.humanVerified || !session.profileId) {
+    throw new DomainConflictError(
+      'world_id_verification_required',
+      `The Member session must complete World ID verification before this action (${input.request.id})`,
+    );
+  }
+
+  if (input.claimedProfileId && input.claimedProfileId !== session.profileId) {
+    throw new MemberSessionError(
+      'member_session_profile_mismatch',
+      'The requested Member profile does not belong to this session',
+      403,
+    );
+  }
+
+  return {
+    session,
+    profileId: session.profileId,
+  };
+}
+
+function requireLegacyProfileId(profileId: string | undefined, field: string): string {
+  if (!profileId) {
+    throw new DomainValidationError(`${field} is required`);
+  }
+
+  return profileId;
 }
 
 function requireMarketplace(
@@ -588,6 +740,30 @@ export function createApi(options: CreateApiOptions = {}): FastifyInstance {
     }
   });
 
+  app.post('/v1/member-sessions', async (request, reply) => {
+    const repository = requireMemberSessionRepository(options.memberSessions, request);
+    const token = `nook_ms_${randomBytes(32).toString('base64url')}`;
+    const now = new Date();
+    const session = await repository.create({
+      id: randomUUID(),
+      tokenHash: hashMemberSessionToken(token),
+      expiresAt: new Date(now.getTime() + MEMBER_SESSION_LIFETIME_MILLISECONDS).toISOString(),
+    });
+
+    return reply
+      .header('cache-control', 'no-store')
+      .code(201)
+      .send({
+        token,
+        session: memberSessionDto(session),
+      });
+  });
+
+  app.get('/v1/member-session', async (request, reply) => {
+    const session = await requireMemberSession(options.memberSessions, request);
+    return reply.header('cache-control', 'no-store').send(memberSessionDto(session));
+  });
+
   app.post('/v1/profiles', async (request, reply) => {
     const input = profileBody.parse(request.body);
     const profile = await requireMarketplace(options.marketplace, request).createProfile(input);
@@ -641,8 +817,18 @@ export function createApi(options: CreateApiOptions = {}): FastifyInstance {
 
   app.post('/v1/listings', async (request, reply) => {
     const input = listingBody.parse(request.body);
+    let hostProfileId: string;
 
-    if (options.memberWorldId || options.worldIdVerifications) {
+    if (options.memberSessions) {
+      hostProfileId = (
+        await requireAuthenticatedMemberSession({
+          repository: options.memberSessions,
+          request,
+          ...(input.hostProfileId ? { claimedProfileId: input.hostProfileId } : {}),
+        })
+      ).profileId;
+    } else if (options.memberWorldId || options.worldIdVerifications) {
+      hostProfileId = requireLegacyProfileId(input.hostProfileId, 'hostProfileId');
       const worldId = requireMemberWorldId(
         options.memberWorldId,
         options.worldIdVerifications,
@@ -651,13 +837,16 @@ export function createApi(options: CreateApiOptions = {}): FastifyInstance {
       await requireVerifiedMember({
         verification: worldId.verification,
         repository: worldId.repository,
-        profileId: input.hostProfileId,
+        profileId: hostProfileId,
         request,
       });
+    } else {
+      hostProfileId = requireLegacyProfileId(input.hostProfileId, 'hostProfileId');
     }
 
     const detail = await requireMarketplace(options.marketplace, request).createListingDraft({
       ...input,
+      hostProfileId,
       nightlyRate: TokenAmount.fromAtomicUnits(input.nightlyRateAtomic),
       baseDeposit: TokenAmount.fromAtomicUnits(input.baseDepositAtomic),
       availability: input.availability.map((range) => StayRange.fromStrings(range)),
@@ -668,7 +857,16 @@ export function createApi(options: CreateApiOptions = {}): FastifyInstance {
 
   app.post('/v1/listings/:listingId/publish', async (request) => {
     const { listingId } = listingParams.parse(request.params);
-    const detail = await requireMarketplace(options.marketplace, request).publishListing(listingId);
+    const marketplace = requireMarketplace(options.marketplace, request);
+    if (options.memberSessions) {
+      const existing = await marketplace.getListing(listingId);
+      await requireAuthenticatedMemberSession({
+        repository: options.memberSessions,
+        request,
+        claimedProfileId: existing.listing.hostProfileId,
+      });
+    }
+    const detail = await marketplace.publishListing(listingId);
     return listingDetailDto(detail);
   });
 
@@ -736,9 +934,18 @@ export function createApi(options: CreateApiOptions = {}): FastifyInstance {
 
   app.post('/v1/booking-quotes', async (request, reply) => {
     const input = quoteBody.parse(request.body);
+    const guestProfileId = options.memberSessions
+      ? (
+          await requireAuthenticatedMemberSession({
+            repository: options.memberSessions,
+            request,
+            ...(input.guestProfileId ? { claimedProfileId: input.guestProfileId } : {}),
+          })
+        ).profileId
+      : requireLegacyProfileId(input.guestProfileId, 'guestProfileId');
     const quote = await requireMarketplace(options.marketplace, request).createQuote({
       listingId: input.listingId,
-      guestProfileId: input.guestProfileId,
+      guestProfileId,
       stayRange: StayRange.fromStrings({
         checkIn: input.checkIn,
         checkOut: input.checkOut,
@@ -748,22 +955,28 @@ export function createApi(options: CreateApiOptions = {}): FastifyInstance {
     return reply.code(201).send(quoteDto(quote));
   });
 
-  const getWorldIdMemberConfig = (request: FastifyRequest) => {
+  const getWorldIdMemberConfig = async (request: FastifyRequest) => {
     const worldId = requireMemberWorldId(
       options.memberWorldId,
       options.worldIdVerifications,
       request,
     );
+    if (options.memberSessions) {
+      await requireMemberSession(options.memberSessions, request);
+    }
 
     return worldId.verification.publicConfig();
   };
 
-  const createWorldIdMemberRpContext = (request: FastifyRequest) => {
+  const createWorldIdMemberRpContext = async (request: FastifyRequest) => {
     const worldId = requireMemberWorldId(
       options.memberWorldId,
       options.worldIdVerifications,
       request,
     );
+    if (options.memberSessions) {
+      await requireMemberSession(options.memberSessions, request);
+    }
 
     return worldId.verification.createRpContext();
   };
@@ -776,8 +989,36 @@ export function createApi(options: CreateApiOptions = {}): FastifyInstance {
       request,
     );
     const config = worldId.verification.publicConfig();
+    if (options.memberSessions) {
+      const session = await requireMemberSession(options.memberSessions, request);
+
+      if (!session.humanVerified || !session.profileId) {
+        return {
+          humanVerified: false,
+        };
+      }
+
+      if (input.profileId && input.profileId !== session.profileId) {
+        throw new MemberSessionError(
+          'member_session_profile_mismatch',
+          'The requested Member profile does not belong to this session',
+          403,
+        );
+      }
+
+      return {
+        provider: 'world_id' as const,
+        credential: 'proof_of_human' as const,
+        humanVerified: true as const,
+        environment: config.environment,
+        status: 'existing' as const,
+        profileId: session.profileId,
+      };
+    }
+
+    const profileId = requireLegacyProfileId(input.profileId, 'profileId');
     const humanVerified = await worldId.repository.isVerified({
-      profileId: input.profileId,
+      profileId,
       action: config.action,
     });
 
@@ -804,12 +1045,44 @@ export function createApi(options: CreateApiOptions = {}): FastifyInstance {
       request,
     );
     const config = worldId.verification.publicConfig();
+
+    if (options.memberSessions) {
+      const session = await requireMemberSession(options.memberSessions, request);
+      const verified = await worldId.verification.verifyProof({
+        proof: input.proof,
+        expectedSignal: session.id,
+      });
+      const newProfileId = randomUUID();
+      const authenticated = await options.memberSessions.authenticateWorldId({
+        sessionId: session.id,
+        newProfileId,
+        newProfilePublicRef: `member-${newProfileId}`,
+        provider: verified.provider,
+        credential: verified.credential,
+        action: config.action,
+        environment: verified.environment,
+        protocolVersion: verified.protocolVersion,
+        nullifierDecimal: verified.nullifierDecimal,
+        verifiedAt: new Date().toISOString(),
+      });
+
+      return {
+        provider: verified.provider,
+        credential: verified.credential,
+        humanVerified: true,
+        environment: verified.environment,
+        status: authenticated.status,
+        profileId: authenticated.session.profileId,
+      };
+    }
+
+    const profileId = requireLegacyProfileId(input.profileId, 'profileId');
     const verified = await worldId.verification.verifyProof({
       proof: input.proof,
-      expectedSignal: input.profileId,
+      expectedSignal: profileId,
     });
     const status = await worldId.repository.record({
-      profileId: input.profileId,
+      profileId,
       provider: verified.provider,
       credential: verified.credential,
       action: config.action,
@@ -841,17 +1114,25 @@ export function createApi(options: CreateApiOptions = {}): FastifyInstance {
 
   app.post('/v1/agents/guest/world-connection', async (request) => {
     const input = worldConnectionBody.parse(request.body);
-    const memberWorldId = requireMemberWorldId(
-      options.memberWorldId,
-      options.worldIdVerifications,
-      request,
-    );
-    await requireVerifiedMember({
-      verification: memberWorldId.verification,
-      repository: memberWorldId.repository,
-      profileId: input.profileId,
-      request,
-    });
+    if (options.memberSessions) {
+      await requireAuthenticatedMemberSession({
+        repository: options.memberSessions,
+        request,
+        ...(input.profileId ? { claimedProfileId: input.profileId } : {}),
+      });
+    } else {
+      const memberWorldId = requireMemberWorldId(
+        options.memberWorldId,
+        options.worldIdVerifications,
+        request,
+      );
+      await requireVerifiedMember({
+        verification: memberWorldId.verification,
+        repository: memberWorldId.repository,
+        profileId: requireLegacyProfileId(input.profileId, 'profileId'),
+        request,
+      });
+    }
     const agent = requireWorldGuestAgent(options.worldGuestAgent, request);
     const world = await agent.getConnectionStatus();
     const graphSignal = await requireAgentRegistration({
@@ -869,17 +1150,29 @@ export function createApi(options: CreateApiOptions = {}): FastifyInstance {
   app.post('/v1/agents/guest/secure-match', async (request, reply) => {
     const input = guestAgentSecureMatchBody.parse(request.body);
     const idempotencyKey = z.string().min(8).max(200).parse(request.headers['idempotency-key']);
-    const memberWorldId = requireMemberWorldId(
-      options.memberWorldId,
-      options.worldIdVerifications,
-      request,
-    );
-    await requireVerifiedMember({
-      verification: memberWorldId.verification,
-      repository: memberWorldId.repository,
-      profileId: input.guestProfileId,
-      request,
-    });
+    let guestProfileId: string;
+    if (options.memberSessions) {
+      guestProfileId = (
+        await requireAuthenticatedMemberSession({
+          repository: options.memberSessions,
+          request,
+          ...(input.guestProfileId ? { claimedProfileId: input.guestProfileId } : {}),
+        })
+      ).profileId;
+    } else {
+      guestProfileId = requireLegacyProfileId(input.guestProfileId, 'guestProfileId');
+      const memberWorldId = requireMemberWorldId(
+        options.memberWorldId,
+        options.worldIdVerifications,
+        request,
+      );
+      await requireVerifiedMember({
+        verification: memberWorldId.verification,
+        repository: memberWorldId.repository,
+        profileId: guestProfileId,
+        request,
+      });
+    }
 
     const marketplace = requireMarketplace(options.marketplace, request);
     const searchResult = await requireMarketplaceAgents(options.marketplaceAgents, request).search({
@@ -912,7 +1205,7 @@ export function createApi(options: CreateApiOptions = {}): FastifyInstance {
 
     const quote = await marketplace.createQuote({
       listingId: selectedMatch.listing.id,
-      guestProfileId: input.guestProfileId,
+      guestProfileId,
       stayRange: StayRange.fromStrings({
         checkIn: searchResult.interpretation.checkIn,
         checkOut: searchResult.interpretation.checkOut,
@@ -954,6 +1247,14 @@ export function createApi(options: CreateApiOptions = {}): FastifyInstance {
   app.post('/v1/agents/guest/reservation-holds', async (request, reply) => {
     const input = holdBody.parse(request.body);
     const idempotencyKey = z.string().min(8).max(200).parse(request.headers['idempotency-key']);
+    if (options.memberSessions) {
+      const quote = await requireMarketplace(options.marketplace, request).getQuote(input.quoteId);
+      await requireAuthenticatedMemberSession({
+        repository: options.memberSessions,
+        request,
+        claimedProfileId: quote.guestProfileId,
+      });
+    }
     const response = await requireWorldGuestAgent(
       options.worldGuestAgent,
       request,
@@ -1049,9 +1350,18 @@ export function createApi(options: CreateApiOptions = {}): FastifyInstance {
   app.post('/v1/booking-requests/:requestId/decision', async (request) => {
     const { requestId } = bookingRequestParams.parse(request.params);
     const input = decisionBody.parse(request.body);
+    const hostProfileId = options.memberSessions
+      ? (
+          await requireAuthenticatedMemberSession({
+            repository: options.memberSessions,
+            request,
+            ...(input.hostProfileId ? { claimedProfileId: input.hostProfileId } : {}),
+          })
+        ).profileId
+      : requireLegacyProfileId(input.hostProfileId, 'hostProfileId');
     const result = await requireMarketplace(options.marketplace, request).decideBookingRequest({
       requestId,
-      hostProfileId: input.hostProfileId,
+      hostProfileId,
       decision: input.decision,
     });
 
@@ -1065,12 +1375,36 @@ export function createApi(options: CreateApiOptions = {}): FastifyInstance {
   app.get('/v1/bookings/:bookingId', async (request) => {
     const { bookingId } = bookingParams.parse(request.params);
     const booking = await requireMarketplace(options.marketplace, request).getBooking(bookingId);
+    if (options.memberSessions) {
+      const member = await requireAuthenticatedMemberSession({
+        repository: options.memberSessions,
+        request,
+      });
+      if (
+        member.profileId !== booking.guestProfileId &&
+        member.profileId !== booking.hostProfileId
+      ) {
+        throw new MemberSessionError(
+          'member_session_profile_mismatch',
+          'This Booking does not belong to the current Member session',
+          403,
+        );
+      }
+    }
     return bookingDto(booking);
   });
 
   app.post('/v1/bookings/:bookingId/deposit', async (request, reply) => {
     const { bookingId } = bookingParams.parse(request.params);
     const idempotencyKey = z.string().min(8).max(200).parse(request.headers['idempotency-key']);
+    if (options.memberSessions) {
+      const booking = await requireMarketplace(options.marketplace, request).getBooking(bookingId);
+      await requireAuthenticatedMemberSession({
+        repository: options.memberSessions,
+        request,
+        claimedProfileId: booking.guestProfileId,
+      });
+    }
     const result = await requireDeposits(options.deposits, request).fundDeposit({
       bookingId,
       idempotencyKey,
@@ -1084,12 +1418,28 @@ export function createApi(options: CreateApiOptions = {}): FastifyInstance {
   app.get('/v1/operations/:operationId', async (request) => {
     const { operationId } = operationParams.parse(request.params);
     const result = await requireDeposits(options.deposits, request).getDeposit(operationId);
+    if (options.memberSessions) {
+      await requireAuthenticatedMemberSession({
+        repository: options.memberSessions,
+        request,
+        claimedProfileId: result.snapshot.booking.guestProfileId,
+      });
+    }
     return depositDto(result, options.hederaTopicId);
   });
 
   app.post('/v1/operations/:operationId/reconcile', async (request, reply) => {
     const { operationId } = operationParams.parse(request.params);
-    const result = await requireDeposits(options.deposits, request).reconcileDeposit(operationId);
+    const deposits = requireDeposits(options.deposits, request);
+    if (options.memberSessions) {
+      const existing = await deposits.getDeposit(operationId);
+      await requireAuthenticatedMemberSession({
+        repository: options.memberSessions,
+        request,
+        claimedProfileId: existing.snapshot.booking.guestProfileId,
+      });
+    }
+    const result = await deposits.reconcileDeposit(operationId);
 
     return reply
       .code(result.snapshot.operation.status === 'confirmed' ? 200 : 202)
@@ -1104,6 +1454,12 @@ export function createApi(options: CreateApiOptions = {}): FastifyInstance {
 
   app.setErrorHandler(
     (error: Error & { code?: string }, request: FastifyRequest, reply: FastifyReply) => {
+      if (error instanceof MemberSessionError) {
+        return reply
+          .code(error.statusCode)
+          .send(errorEnvelope(request, error.reason, error.message));
+      }
+
       if (error instanceof ZodError) {
         return reply.code(400).send(
           errorEnvelope(request, 'validation_error', 'Request validation failed', {

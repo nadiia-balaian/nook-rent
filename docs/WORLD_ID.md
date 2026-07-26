@@ -6,11 +6,12 @@ World ID is the direct onboarding gate for every Nook.rent Member:
 
 ```text
 choose Host or Guest
+  -> API creates an anonymous Member Session
   -> API creates a signed RP context
   -> IDKit opens a live World App QR flow
   -> Member completes Proof of Human
-  -> API verifies the profile-bound proof with World
-  -> private action-specific nullifier is stored
+  -> API verifies a proof bound to the Member Session
+  -> private action-specific nullifier attaches the session to a Member
   -> Host may create a Listing
   -> Guest may connect a World-backed Agent
 ```
@@ -41,6 +42,11 @@ The browser receives only the application ID, relying-party ID, action,
 environment, and short-lived signed RP context. The API verifies the resulting
 proof and never returns its nullifier.
 
+The web app stores the opaque Member Session token in browser session storage.
+Host and Guest share verification only while that authenticated session is
+active. A new tab, browser session, or private session receives a new anonymous
+session and must prove World ID before the server attaches it to a Member.
+
 ## Database setup
 
 Review and explicitly apply:
@@ -48,12 +54,14 @@ Review and explicitly apply:
 ```text
 supabase/migrations/202607250006_world_id_host_verification.sql
 supabase/migrations/202607250007_world_id_member_verification.sql
+supabase/migrations/202607260012_member_sessions.sql
 ```
 
 The first migration creates the private `nook.world_id_verifications` table.
-The second generalizes the stored role from Host to Member. The final table has
-unique profile/action and nullifier/action bindings. Public access is revoked
-and row-level security is enabled without browser policies.
+The second generalizes the stored role from Host to Member. The third creates
+server-only Member Sessions and stores only SHA-256 token hashes. The final
+tables have unique profile/action and nullifier/action bindings. Public access
+is revoked and row-level security is enabled without browser policies.
 
 Applying the hosted migration is an external database write:
 
@@ -71,12 +79,14 @@ World ID**. Expected behavior:
 
 1. IDKit opens the real QR/deep-link flow.
 2. World App shows the Nook Member onboarding action.
-3. A valid proof closes the widget and shows **World ID verified**.
+3. A valid proof binds that Member Session and shows **World ID verified**.
 4. A Host may continue to Listing creation.
 5. A Guest may then connect the World-backed Agent; the connection and
    protected hold both require the Guest profile's direct verification.
 6. The API response contains no proof, nullifier, signing key, wallet, or
    personal identity data.
+7. Changing roles in the same session does not repeat verification; opening a
+   fresh private session does.
 
 Official references:
 

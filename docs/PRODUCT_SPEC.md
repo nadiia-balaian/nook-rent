@@ -64,8 +64,10 @@ exists.
 
 A Member can be a Host, a Guest, or both.
 World ID verification belongs to the Member profile, not to a role. A verified
-Member who changes between Host and Guest is not asked to repeat the same
-action.
+Member who changes between Host and Guest inside the same authenticated Member
+Session is not asked to repeat the same action. A fresh browser or private
+session starts unverified and must complete World ID before the API attaches it
+to a Member profile.
 
 ### Host
 
@@ -169,7 +171,9 @@ The integrations must be meaningful and end to end:
 
 World proofs are processed server-side and are not published to HCS. Member
 World ID verification stores only the private action-specific nullifier
-required to prevent reuse; the browser receives only a verified result.
+required to prevent reuse; the browser receives only a verified result. The
+proof signal is the server-issued Member Session ID. The browser never chooses
+the protected profile ID.
 
 ## 10. The Graph
 
@@ -318,6 +322,8 @@ The exact HTTP representation may evolve, but the MVP requires these
 capabilities:
 
 ```text
+POST   /v1/member-sessions
+GET    /v1/member-session
 POST   /v1/profiles
 POST   /v1/agents/verify
 GET    /v1/world-id/member/config
@@ -340,8 +346,9 @@ GET    /v1/profiles/:profileId/reputation
 GET    /v1/profiles/:profileId/history
 ```
 
-Protected mutations require an authenticated profile, a signed request, an
-idempotency key, and the appropriate Agent capability.
+Protected mutations derive the Member profile from an opaque authenticated
+Member Session rather than accepting browser-supplied profile identity. They
+also require an idempotency key and the appropriate Agent capability.
 
 ## 18. Demo acceptance scenario
 

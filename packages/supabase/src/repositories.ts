@@ -68,6 +68,41 @@ interface WorldIdVerificationRow {
   nullifier: string;
 }
 
+interface MemberSessionRow {
+  id: string;
+  profile_id: string | null;
+  world_verified_at: Date | string | null;
+  expires_at: Date | string;
+  created_at: Date | string;
+  updated_at: Date | string;
+}
+
+export interface MemberSessionRecord {
+  id: string;
+  profileId?: string;
+  humanVerified: boolean;
+  worldVerifiedAt?: string;
+  expiresAt: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+function timestamp(value: Date | string): string {
+  return value instanceof Date ? value.toISOString() : new Date(value).toISOString();
+}
+
+function mapMemberSessionRow(row: MemberSessionRow): MemberSessionRecord {
+  return {
+    id: row.id,
+    ...(row.profile_id ? { profileId: row.profile_id } : {}),
+    humanVerified: row.profile_id !== null && row.world_verified_at !== null,
+    ...(row.world_verified_at ? { worldVerifiedAt: timestamp(row.world_verified_at) } : {}),
+    expiresAt: timestamp(row.expires_at),
+    createdAt: timestamp(row.created_at),
+    updatedAt: timestamp(row.updated_at),
+  };
+}
+
 function mapReputationTier(value: string): RentalReputationTier {
   switch (value) {
     case 'newcomer':
@@ -207,6 +242,157 @@ export class PostgresWorldIdVerificationRepository {
     `;
 
     return 'created';
+  }
+}
+
+export interface AuthenticateMemberSessionWorldIdInput extends Omit<
+  RecordWorldIdVerificationInput,
+  'profileId'
+> {
+  sessionId: string;
+  newProfileId: string;
+  newProfilePublicRef: string;
+}
+
+export class PostgresMemberSessionRepository {
+  constructor(private readonly sql: PostgresClient) {}
+
+  async create(input: {
+    id: string;
+    tokenHash: string;
+    expiresAt: string;
+  }): Promise<MemberSessionRecord> {
+    const [row] = await this.sql<MemberSessionRow[]>`
+      insert into nook.member_sessions (id, token_hash, expires_at)
+      values (${input.id}, ${input.tokenHash}, ${input.expiresAt})
+      returning *
+    `;
+
+    if (!row) {
+      throw new Error('Member session insert did not return a row');
+    }
+
+    return mapMemberSessionRow(row);
+  }
+
+  async findByTokenHash(input: {
+    tokenHash: string;
+    now: string;
+  }): Promise<MemberSessionRecord | undefined> {
+    const [row] = await this.sql<MemberSessionRow[]>`
+      select *
+      from nook.member_sessions
+      where token_hash = ${input.tokenHash}
+        and expires_at > ${input.now}
+      limit 1
+    `;
+
+    return row ? mapMemberSessionRow(row) : undefined;
+  }
+
+  async authenticateWorldId(
+    input: AuthenticateMemberSessionWorldIdInput,
+  ): Promise<{ session: MemberSessionRecord; status: 'created' | 'existing' | 'idempotent' }> {
+    return this.sql.begin(async (transaction) => {
+      const [session] = await transaction<MemberSessionRow[]>`
+        select *
+        from nook.member_sessions
+        where id = ${input.sessionId}
+          and expires_at > ${input.verifiedAt}
+        for update
+      `;
+
+      if (!session) {
+        throw new DomainConflictError('member_session_expired', 'The Member session has expired');
+      }
+
+      const [humanVerification] = await transaction<WorldIdVerificationRow[]>`
+        select profile_id, nullifier::text
+        from nook.world_id_verifications
+        where nullifier = ${input.nullifierDecimal}
+          and action = ${input.action}
+        for update
+      `;
+
+      const [sessionVerification] = session.profile_id
+        ? await transaction<WorldIdVerificationRow[]>`
+            select profile_id, nullifier::text
+            from nook.world_id_verifications
+            where profile_id = ${session.profile_id}
+              and action = ${input.action}
+            for update
+          `
+        : [];
+
+      if (
+        session.profile_id &&
+        (sessionVerification?.nullifier !== input.nullifierDecimal ||
+          (humanVerification && session.profile_id !== humanVerification.profile_id))
+      ) {
+        throw new DomainConflictError(
+          'world_id_already_bound',
+          'This Member session is already bound to another World ID verification',
+        );
+      }
+
+      let profileId = session.profile_id ?? humanVerification?.profile_id;
+      let status: 'created' | 'existing' | 'idempotent';
+
+      if (profileId) {
+        status = session.world_verified_at ? 'idempotent' : 'existing';
+      } else {
+        profileId = input.newProfileId;
+        status = 'created';
+
+        await transaction`
+          insert into nook.profiles (id, role, public_ref, created_at)
+          values (${profileId}, 'both', ${input.newProfilePublicRef}, ${input.verifiedAt})
+        `;
+        await transaction`
+          insert into nook.world_id_verifications (
+            profile_id,
+            role,
+            provider,
+            credential,
+            action,
+            environment,
+            protocol_version,
+            nullifier,
+            verified_at
+          )
+          values (
+            ${profileId},
+            'member',
+            ${input.provider},
+            ${input.credential},
+            ${input.action},
+            ${input.environment},
+            ${input.protocolVersion},
+            ${input.nullifierDecimal},
+            ${input.verifiedAt}
+          )
+        `;
+      }
+
+      const [authenticated] = await transaction<MemberSessionRow[]>`
+        update nook.member_sessions
+        set
+          profile_id = ${profileId},
+          world_verified_at = coalesce(world_verified_at, ${input.verifiedAt}),
+          updated_at = ${input.verifiedAt}
+        where id = ${input.sessionId}
+        returning *
+      `;
+
+      if (!authenticated) {
+        throw new Error('Member session authentication did not return a row');
+      }
+
+      return {
+        session: mapMemberSessionRow(authenticated),
+        status,
+      };
+    });
   }
 }
 

@@ -256,6 +256,149 @@ describe('Nook API', () => {
     expect(JSON.stringify(response.json())).not.toContain('nullifier');
   });
 
+  it('does not let a fresh browser inherit verification from a known Member profile', async () => {
+    const application = createApi({
+      memberWorldId: verifiedMemberWorldId(),
+      worldIdVerifications: {
+        isVerified: () => Promise.resolve(true),
+        record: () => Promise.reject(new Error('unused')),
+      },
+      memberSessions: {
+        create: () => Promise.reject(new Error('unused')),
+        findByTokenHash: () => Promise.resolve(undefined),
+        authenticateWorldId: () => Promise.reject(new Error('unused')),
+      },
+    });
+    applications.push(application);
+
+    const response = await application.inject({
+      method: 'GET',
+      url: `/v1/world-id/member/status?profileId=${hostProfileId}`,
+    });
+
+    expect(response.statusCode).toBe(401);
+    expect(response.json()).toMatchObject({
+      error: {
+        code: 'member_session_required',
+      },
+    });
+  });
+
+  it('shares World verification only inside the authenticated Member session', async () => {
+    const sessionsByHash = new Map<
+      string,
+      {
+        id: string;
+        profileId?: string;
+        humanVerified: boolean;
+        worldVerifiedAt?: string;
+        expiresAt: string;
+        createdAt: string;
+        updatedAt: string;
+      }
+    >();
+    const sessionsById = new Map<
+      string,
+      typeof sessionsByHash extends Map<string, infer T> ? T : never
+    >();
+    let expectedSignal: string | undefined;
+    const memberWorldId = {
+      ...verifiedMemberWorldId(),
+      verifyProof: (input: { expectedSignal: string }) => {
+        expectedSignal = input.expectedSignal;
+        return verifiedMemberWorldId().verifyProof();
+      },
+    };
+    const application = createApi({
+      memberWorldId,
+      worldIdVerifications: {
+        isVerified: () => Promise.resolve(true),
+        record: () => Promise.reject(new Error('session repository owns this write')),
+      },
+      memberSessions: {
+        create: (input) => {
+          const session = {
+            id: input.id,
+            humanVerified: false,
+            expiresAt: input.expiresAt,
+            createdAt: '2026-07-26T00:00:00.000Z',
+            updatedAt: '2026-07-26T00:00:00.000Z',
+          };
+          sessionsByHash.set(input.tokenHash, session);
+          sessionsById.set(input.id, session);
+          return Promise.resolve(session);
+        },
+        findByTokenHash: (input) => Promise.resolve(sessionsByHash.get(input.tokenHash)),
+        authenticateWorldId: (input) => {
+          const session = sessionsById.get(input.sessionId);
+          if (!session) throw new Error('Missing test session');
+          session.profileId = hostProfileId;
+          session.humanVerified = true;
+          session.worldVerifiedAt = input.verifiedAt;
+          session.updatedAt = input.verifiedAt;
+          return Promise.resolve({
+            session,
+            status: 'existing' as const,
+          });
+        },
+      },
+    });
+    applications.push(application);
+
+    const firstCreated = await application.inject({
+      method: 'POST',
+      url: '/v1/member-sessions',
+    });
+    const first = firstCreated.json();
+    const firstHeaders = {
+      authorization: `Bearer ${first.token}`,
+    };
+
+    const beforeVerification = await application.inject({
+      method: 'GET',
+      url: '/v1/world-id/member/status',
+      headers: firstHeaders,
+    });
+    expect(beforeVerification.json()).toEqual({
+      humanVerified: false,
+    });
+
+    const verified = await application.inject({
+      method: 'POST',
+      url: '/v1/world-id/member/verify',
+      headers: firstHeaders,
+      payload: {
+        proof: {
+          protocol_version: '4.0',
+          responses: [],
+        },
+      },
+    });
+    expect(verified.statusCode).toBe(200);
+    expect(verified.json()).toMatchObject({
+      humanVerified: true,
+      profileId: hostProfileId,
+      status: 'existing',
+    });
+    expect(expectedSignal).toBe(first.session.id);
+
+    const secondCreated = await application.inject({
+      method: 'POST',
+      url: '/v1/member-sessions',
+    });
+    const second = secondCreated.json();
+    const secondStatus = await application.inject({
+      method: 'GET',
+      url: '/v1/world-id/member/status',
+      headers: {
+        authorization: `Bearer ${second.token}`,
+      },
+    });
+    expect(secondStatus.json()).toEqual({
+      humanVerified: false,
+    });
+  });
+
   it('verifies and stores a profile-bound World ID Member proof without exposing its nullifier', async () => {
     let stored: { profileId: string; nullifierDecimal: string } | undefined;
     const application = createApi({

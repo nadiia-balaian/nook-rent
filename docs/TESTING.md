@@ -125,11 +125,12 @@ tests prove application behavior. The opt-in live exit run additionally proved
 Agent registration, AgentBook lookup on World Chain, protected Hold creation,
 fresh-nonce idempotent retry, and rejection of a second concurrent Hold.
 
-The Member World ID suite verifies profile-bound proofs, safe public
-configuration, signed RP contexts, persisted verification restoration after a
-browser restart, cross-role reuse for one Member, provider rejection, direct
-Host and Guest gating, and
-protected-hold rechecks with controlled dependencies. It does not
+The Member World ID suite verifies session-bound proofs, safe public
+configuration, signed RP contexts, same-session cross-role reuse, fresh-session
+isolation, provider rejection, direct Host and Guest gating, and protected-hold
+rechecks with controlled dependencies. PostgreSQL integration tests verify
+hashed-token lookup, proof-gated profile attachment, and rejection when a
+session attempts to switch World identity. It does not
 count as live World evidence until the Member action is installed in the
 Developer Portal, the hosted migrations are applied, and a World App proof
 succeeds end to end.

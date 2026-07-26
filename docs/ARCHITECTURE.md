@@ -242,13 +242,17 @@ financial authority.
 ## World architecture
 
 - Both Host and Guest onboarding open the real IDKit World App QR flow.
+- The API issues an opaque Member Session token and stores only its SHA-256
+  hash.
 - The API creates the signed RP context and keeps its signing key server-side.
-- World verifies the profile-bound Proof of Human on the API.
+- World verifies a Proof of Human bound to the server-issued Member Session ID.
 - Supabase stores the action-specific nullifier privately to prevent reuse.
 - Host and Guest are roles of one Member profile, so changing roles reuses the
-  same successful Member verification.
-- On restart, the browser asks the API for a boolean profile verification status
-  and resumes the verified Member without requesting the same World action again.
+  same successful verification only inside the same authenticated session.
+- The web app keeps the opaque token in session storage. A fresh tab, browser
+  session, or private session receives a new unverified Member Session.
+- Protected API routes derive the profile from the Member Session and reject
+  browser-supplied profile mismatches.
 - After direct Member verification, Guest onboarding performs live AgentBook
   and Agent0 capability checks, then shows only compact verified badges.
 - The browser asks the server-side Guest Agent to perform the protected action.
@@ -335,12 +339,9 @@ model, not a production custody design.
 - Nook.rent tables must not depend on unrelated application tables.
 
 The schema and repositories are implemented and tested against local
-PostgreSQL. The first five migrations, including the World AgentKit
-authorization and idempotent-retry changes, are applied to the isolated hosted
-`nook` schema. The sixth migration introduced private Host World ID
-verification. The seventh locally implemented migration generalizes it to
-private Member verification for both Host and Guest; the World ID migrations
-remain pending an explicit hosted apply.
+PostgreSQL. Migration `202607260012_member_sessions.sql` adds private,
+server-only Member Sessions with hashed tokens and optional verified Member
+bindings. Applying it to hosted Supabase remains an explicit deployment step.
 
 ## Deployment shape
 

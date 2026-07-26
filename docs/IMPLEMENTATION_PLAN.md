@@ -232,9 +232,9 @@ Completed exit evidence:
 
 Estimate: 4–7 focused hours
 
-Status: Guest AgentKit completed and verified live on 2026-07-25; direct World
-IDKit Member onboarding is implemented locally for both Host and Guest, with
-the Member action and hosted migrations pending.
+Status: Guest AgentKit and direct World IDKit onboarding are implemented.
+Server-owned Member Sessions now bind verified identity to one active browser
+session; the new hosted session migration remains pending explicit application.
 
 Implement:
 
@@ -242,6 +242,8 @@ Implement:
   flow;
 - server-signed RP context and server-side Member proof verification;
 - private, action-specific Member nullifier persistence;
+- opaque server-owned Member Sessions with hashed tokens;
+- same-session Host and Guest verification reuse without cross-session sharing;
 - Agent wallet registration flow;
 - AgentKit client for the Guest Agent;
 - protected hold or Booking endpoint;
@@ -257,13 +259,15 @@ Exit check:
 - human-backed Agent can create one valid hold;
 - replay is rejected;
 - no World identifier appears in HCS or browser logs.
+- a fresh browser session cannot inherit another session's verification.
 
 Local evidence:
 
 - both guided role paths have no demo bypass and continue only after the API
   verifies the direct Member World ID result;
 - API tests prove safe configuration, server-signed RP context, proof
-  verification, private persistence, and nullifier redaction;
+  verification, private persistence, session isolation, and nullifier
+  redaction;
 - the official AgentKit client completes the `402` challenge and signed retry;
 - the two-step guided Guest UI requires live World and The Graph verification
   badges before continuing;
