@@ -1,6 +1,6 @@
 # ADR 0004: Bind Member identity to server-owned browser sessions
 
-Status: accepted
+Status: superseded in part by ADR 0006
 
 Date: 2026-07-26
 
@@ -21,7 +21,7 @@ only its SHA-256 hash. A new session has no profile and no verified state.
 
 IDKit proofs use the server-issued Member Session ID as their signal. After
 World verifies the proof, the API finds or creates the Member associated with
-the private action-specific nullifier and binds only that session to the Member.
+the private World identity evidence and binds only that session to the Member.
 The session cannot later switch to another World identity.
 
 Protected API routes derive the Member profile from the bearer session and
@@ -35,8 +35,8 @@ inside the same active browser session.
 - Switching between Host and Guest in one session does not repeat World ID.
 - Re-proving the same World identity in another session reaches the same Member
   only after that session completes World ID.
-- Raw tokens and World nullifiers remain server-side and are never published to
-  HCS.
+- Raw tokens and World proof identifiers remain server-side and are never
+  published to HCS.
 - Expired or invalid sessions fail closed on protected routes.
 - Hosted deployment requires the Member Session migration before the new API
   version is activated.

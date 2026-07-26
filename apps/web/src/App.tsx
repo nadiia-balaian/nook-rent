@@ -30,10 +30,11 @@ import {
 } from 'lucide-react';
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import {
-  IDKitRequestWidget,
-  proofOfHuman,
+  any,
+  CredentialRequest,
+  IDKitSessionWidget,
   type IDKitErrorCodes,
-  type IDKitResult,
+  type IDKitResultSession,
 } from '@worldcoin/idkit';
 
 import {
@@ -201,6 +202,8 @@ function friendlyError(error: NookApiError): string {
       return 'World ID verification is temporarily unavailable. Please try again.';
     case 'world_id_already_bound':
       return 'This session is already connected to another World identity.';
+    case 'world_id_proof_replayed':
+      return 'This World ID proof was already used. Start a fresh verification.';
     case 'member_session_required':
     case 'member_session_invalid':
       return 'Your private session expired. Refresh the page to start a new one.';
@@ -459,7 +462,7 @@ export function App() {
     }
   };
 
-  const verifyMemberWorldId = async (proof: IDKitResult) => {
+  const verifyMemberWorldId = async (proof: IDKitResultSession) => {
     setBusyAction('connect-world-id');
     setError(null);
 
@@ -975,20 +978,20 @@ export function App() {
       </main>
 
       {memberSession && memberWorldIdConfig && memberWorldIdRpContext && (
-        <IDKitRequestWidget
-          action={memberWorldIdConfig.action}
+        <IDKitSessionWidget
           action_description="Verify a human Member before using protected Nook marketplace actions"
-          allow_legacy_proofs={false}
           app_id={memberWorldIdConfig.appId}
+          constraints={any(
+            CredentialRequest('proof_of_human', {
+              signal: memberSession.id,
+            }),
+          )}
           environment={memberWorldIdConfig.environment}
           handleVerify={verifyMemberWorldId}
           onError={handleWorldIdWidgetError}
           onOpenChange={setMemberWorldIdOpen}
           onSuccess={() => setMemberWorldIdOpen(false)}
           open={memberWorldIdOpen}
-          preset={proofOfHuman({
-            signal: memberSession.id,
-          })}
           rp_context={memberWorldIdRpContext}
         />
       )}
@@ -1239,7 +1242,7 @@ function IdentityScreen({
         <p>
           {connectingAgent
             ? 'Connect the Agent that can search, select, and secure an eligible home within your mandate.'
-            : 'Scan the live World ID QR code in World App. Nook stores only a private, action-specific verification—not your name, wallet, or exact address.'}
+            : 'Scan the live World ID QR code in World App. Nook stores only private session proof references—not your name, wallet, or exact address.'}
         </p>
         <div className="privacy-first">
           <ShieldCheck size={18} />

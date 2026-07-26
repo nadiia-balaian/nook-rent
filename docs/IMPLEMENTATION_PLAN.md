@@ -234,15 +234,18 @@ Completed exit evidence:
 Estimate: 4–7 focused hours
 
 Status: Guest AgentKit and direct World IDKit onboarding are implemented.
-Server-owned Member Sessions now bind verified identity to one active browser
-session; the new hosted session migration remains pending explicit application.
+Server-owned Member Sessions bind verification to one active browser session.
+The World ID 4.0 session-proof migration is implemented locally and remains
+pending explicit hosted application.
 
 Implement:
 
 - Member Proof of Human for Host and Guest through the real IDKit World App QR
   flow;
-- server-signed RP context and server-side Member proof verification;
-- private, action-specific Member nullifier persistence;
+- actionless server-signed session RP context and server-side Member proof
+  verification;
+- private World Session ID persistence and one-use session-nullifier replay
+  protection;
 - opaque server-owned Member Sessions with hashed tokens;
 - same-session Host and Guest verification reuse without cross-session sharing;
 - Agent wallet registration flow;
@@ -267,7 +270,7 @@ Local evidence:
 - both guided role paths have no demo bypass and continue only after the API
   verifies the direct Member World ID result;
 - API tests prove safe configuration, server-signed RP context, proof
-  verification, private persistence, session isolation, and nullifier
+  verification, private persistence, session isolation, and World identifier
   redaction;
 - the official AgentKit client completes the `402` challenge and signed retry;
 - the two-step guided Guest UI requires live World and The Graph verification
@@ -442,10 +445,10 @@ Implemented locally:
 
 Remaining live exit:
 
-- apply migration `202607260012_member_sessions.sql` to the intended hosted
-  database;
 - apply migration `202607260012_agent_payment_mandates.sql` to the intended
   hosted database;
+- apply migration `202607260013_world_id_sessions.sql` to the intended hosted
+  database;
 - run one explicitly approved Hedera Testnet Agent payment;
 - record fresh HashScan and HCS evidence without exposing private data.
 

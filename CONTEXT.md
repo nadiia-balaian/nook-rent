@@ -22,9 +22,9 @@ A Member is not a wallet, an agent, or a blockchain account.
 
 An opaque, server-validated authorization session for one active browser
 session. A Member Session begins anonymous and becomes bound to a Member only
-after a valid World ID proof. Host and Guest roles may share that verification
-inside the same Member Session. A new browser or private session must prove
-World ID again before it can access the Member.
+after a valid World ID 4.0 session proof. Host and Guest roles may share that
+verification inside the same Member Session. A new browser or private session
+must prove World ID again before it can access protected Member actions.
 
 ### Host
 
@@ -69,10 +69,11 @@ behavior.
 
 ### World ID Member verification
 
-An action-specific Proof of Human completed by every Member during onboarding,
-whether they continue as Host, Guest, or both. It confirms uniqueness without
-revealing the Member's name, wallet, or exact home address. It is not Rental
-Reputation and is separate from Guest Agent authorization.
+A World ID 4.0 session Proof of Human completed by every Member during
+onboarding, whether they continue as Host, Guest, or both. The private World
+Session ID supplies continuity while each session nullifier prevents replay. It
+does not reveal the Member's name, wallet, or exact home address. It is not
+Rental Reputation and is separate from Guest Agent authorization.
 
 ### Listing
 

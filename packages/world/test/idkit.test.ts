@@ -1,29 +1,29 @@
 import { hashSignal } from '@worldcoin/idkit-core';
 import { describe, expect, it, vi } from 'vitest';
 
-import { MEMBER_WORLD_ID_ACTION, WorldIdMemberVerification } from '../src/idkit.js';
+import { MEMBER_WORLD_ID_SESSION, WorldIdMemberVerification } from '../src/idkit.js';
 import type { WorldIdVerificationError } from '../src/idkit.js';
 
 const environment = {
   appId: 'app_nook_test' as const,
   rpId: 'rp_nook_test' as const,
   signingKey: `0x${'1'.repeat(64)}` as const,
-  action: MEMBER_WORLD_ID_ACTION,
   environment: 'staging' as const,
 };
 const memberProfileId = '10000000-0000-4000-8000-000000000001';
+const worldSessionId = `session_${'a'.repeat(128)}`;
 
 function proof(signal = memberProfileId) {
   return {
     protocol_version: '4.0',
     nonce: 'world-id-test-nonce',
-    action: MEMBER_WORLD_ID_ACTION,
+    session_id: worldSessionId,
     environment: 'staging',
     responses: [
       {
         identifier: 'proof_of_human',
         signal_hash: hashSignal(signal),
-        nullifier: '0x2a',
+        session_nullifier: ['0x2a', '0x2b'],
       },
     ],
   };
@@ -36,9 +36,10 @@ describe('World ID Member verification', () => {
     expect(verification.publicConfig()).toEqual({
       appId: 'app_nook_test',
       rpId: 'rp_nook_test',
-      action: MEMBER_WORLD_ID_ACTION,
+      mode: 'session',
       environment: 'staging',
     });
+    expect(verification.verificationKey()).toBe(MEMBER_WORLD_ID_SESSION);
     expect(verification.createRpContext()).toMatchObject({
       rp_id: 'rp_nook_test',
       nonce: expect.any(String),
@@ -47,7 +48,7 @@ describe('World ID Member verification', () => {
     expect(JSON.stringify(verification.publicConfig())).not.toContain(environment.signingKey);
   });
 
-  it('verifies a profile-bound proof and returns only a decimal nullifier for persistence', async () => {
+  it('verifies a Member-bound session proof and returns continuity and replay identifiers', async () => {
     const providerFetch = vi.fn<typeof fetch>(() =>
       Promise.resolve(
         new Response(JSON.stringify({ success: true }), {
@@ -67,13 +68,14 @@ describe('World ID Member verification', () => {
       provider: 'world_id',
       credential: 'proof_of_human',
       environment: 'staging',
-      nullifierDecimal: '42',
+      worldSessionId,
+      sessionNullifierDecimal: '42',
       protocolVersion: '4.0',
     });
     expect(providerFetch).toHaveBeenCalledOnce();
   });
 
-  it('rejects a proof bound to another Member before calling World', async () => {
+  it('rejects a session proof bound to another Member session before calling World', async () => {
     const providerFetch = vi.fn<typeof fetch>();
     const verification = new WorldIdMemberVerification(environment, providerFetch);
 

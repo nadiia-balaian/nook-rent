@@ -7,19 +7,21 @@ World ID is the direct onboarding gate for every Nook.rent Member:
 ```text
 choose Host or Guest
   -> API creates an anonymous Member Session
-  -> API creates a signed RP context
-  -> IDKit opens a live World App QR flow
-  -> Member completes Proof of Human
-  -> API verifies a proof bound to the Member Session
-  -> private action-specific nullifier attaches the session to a Member
+  -> API creates an actionless signed RP context
+  -> IDKit opens a live World ID 4.0 Session QR flow
+  -> Member completes a session Proof of Human
+  -> API verifies a proof bound to the Member Session signal
+  -> private World Session ID attaches the browser session to a Member
+  -> one-use session nullifier prevents proof replay
   -> Host may create a Listing
   -> Guest may connect a World-backed Agent
 ```
 
 This is separate from the World AgentKit Guest flow. Direct Member verification
-proves a unique person completed onboarding. AgentKit then proves that the
-server-side Guest Agent is acting for a verified human when it requests a
-protected hold. Neither creates Rental Reputation.
+proves that a human completed onboarding and gives Nook a World Session
+continuity identifier rather than reusing a one-time action. AgentKit then
+proves that the server-side Guest Agent is acting for a verified human when it
+requests a protected hold. Neither creates Rental Reputation.
 
 ## Server configuration
 
@@ -30,7 +32,6 @@ these values only in the API environment:
 WORLD_ID_APP_ID=app_...
 WORLD_ID_RP_ID=rp_...
 WORLD_ID_SIGNING_KEY=0x...
-WORLD_ID_ACTION=nook-member-onboarding
 WORLD_ID_ENVIRONMENT=production
 ```
 
@@ -38,9 +39,10 @@ Use `staging` or `sandbox` only when the matching Developer Portal setup and
 World App flow require it. Never expose the signing key through a `VITE_`
 variable.
 
-The browser receives only the application ID, relying-party ID, action,
-environment, and short-lived signed RP context. The API verifies the resulting
-proof and never returns its nullifier.
+The browser receives only the application ID, relying-party ID, environment,
+and short-lived signed RP context. The session RP signature deliberately omits
+an action. The API verifies the resulting proof and never returns its World
+Session ID or session nullifier.
 
 The web app stores the opaque Member Session token in browser session storage.
 Host and Guest share verification only while that authenticated session is
@@ -55,13 +57,15 @@ Review and explicitly apply:
 supabase/migrations/202607250006_world_id_host_verification.sql
 supabase/migrations/202607250007_world_id_member_verification.sql
 supabase/migrations/202607260012_member_sessions.sql
+supabase/migrations/202607260013_world_id_sessions.sql
 ```
 
 The first migration creates the private `nook.world_id_verifications` table.
 The second generalizes the stored role from Host to Member. The third creates
-server-only Member Sessions and stores only SHA-256 token hashes. The final
-tables have unique profile/action and nullifier/action bindings. Public access
-is revoked and row-level security is enabled without browser policies.
+server-only Member Sessions and stores only SHA-256 token hashes. The fourth
+adds private World Session continuity IDs and a replay ledger for one-use
+session nullifiers while preserving legacy verification rows. Public access is
+revoked and row-level security is enabled without browser policies.
 
 Applying the hosted migration is an external database write:
 
@@ -78,17 +82,19 @@ Start the API and web application, choose either role, then select **Verify with
 World ID**. Expected behavior:
 
 1. IDKit opens the real QR/deep-link flow.
-2. World App shows the Nook Member onboarding action.
+2. World App shows the Nook Member session request without a one-time action.
 3. A valid proof binds that Member Session and shows **World ID verified**.
 4. A Host may continue to Listing creation.
 5. A Guest may then connect the World-backed Agent; the connection and
    protected hold both require the Guest profile's direct verification.
 6. The API response contains no proof, nullifier, signing key, wallet, or
    personal identity data.
-7. Changing roles in the same session does not repeat verification; opening a
-   fresh private session does.
+7. Changing roles in the same browser session does not repeat verification;
+   opening a fresh private session requires a new World session proof and does
+   not hit an action verification limit.
 
 Official references:
 
 - [IDKit integration](https://docs.world.org/world-id/idkit/integrate)
 - [IDKit React](https://docs.world.org/world-id/idkit/react)
+- [World ID 4.0 sessions](https://docs.world.org/world-id/4-0-migration)

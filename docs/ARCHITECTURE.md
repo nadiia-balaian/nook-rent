@@ -258,12 +258,15 @@ authority.
 
 ## World architecture
 
-- Both Host and Guest onboarding open the real IDKit World App QR flow.
+- Both Host and Guest onboarding open the real World ID 4.0 session QR flow.
 - The API issues an opaque Member Session token and stores only its SHA-256
   hash.
-- The API creates the signed RP context and keeps its signing key server-side.
-- World verifies a Proof of Human bound to the server-issued Member Session ID.
-- Supabase stores the action-specific nullifier privately to prevent reuse.
+- The API creates an actionless session RP context and keeps its signing key
+  server-side.
+- World verifies a session Proof of Human bound to the server-issued Member
+  Session ID.
+- Supabase stores the private World Session ID for continuity and each
+  one-use session nullifier for replay prevention.
 - Host and Guest are roles of one Member profile, so changing roles reuses the
   same successful verification only inside the same authenticated session.
 - The web app keeps the opaque token in session storage. A fresh tab, browser
@@ -276,7 +279,8 @@ authority.
 - The Agent signs the AgentKit challenge with its registered wallet.
 - The protected hold first rechecks the Guest's direct Member verification.
 - World AgentKit then resolves whether that Agent is human-backed.
-- Anonymous human identifiers and nonces are stored server-side only.
+- World Session IDs, session nullifiers, anonymous Agent human identifiers, and
+  nonces are stored server-side only.
 - The browser receives no Agent address, wallet key, signed header, World
   identifier, or nonce.
 - Per-human hold limits prevent one person from blocking multiple Listings.
@@ -360,12 +364,10 @@ model, not a production custody design.
 - Expiry is claimed in bounded batches with locked rows.
 - Nook.rent tables must not depend on unrelated application tables.
 
-The schema and repositories are implemented and tested against local
-PostgreSQL. The isolated hosted `nook` schema currently includes migrations
-through `202607260011_expire_pending_booking_with_hold.sql`. The two subsequent
-local migrations add private, server-only Member Sessions and bounded Agent
-Payment Mandates. Applying them to hosted Supabase remains an explicit
-deployment step.
+The schema and repositories are implemented and tested against PostgreSQL. The
+hosted `nook` schema includes the private, server-only Member Session migration.
+The bounded Agent Payment Mandate migration and the World ID 4.0 session-proof
+migration remain explicit hosted deployment steps.
 
 ## Deployment shape
 

@@ -15,15 +15,17 @@ import { createApi } from '../src/api.js';
 const applications: ReturnType<typeof createApi>[] = [];
 const worldResourceUri = 'https://api.nook.rent/v1/reservation-holds';
 const hostProfileId = '10000000-0000-4000-8000-000000000001';
+const worldSessionId = `session_${'a'.repeat(128)}`;
 
 function verifiedMemberWorldId() {
   return {
     publicConfig: () => ({
       appId: 'app_nook_test' as const,
       rpId: 'rp_nook_test' as const,
-      action: 'nook-member-onboarding',
+      mode: 'session' as const,
       environment: 'staging' as const,
     }),
+    verificationKey: () => 'nook-member-session',
     createRpContext: () => ({
       rp_id: 'rp_nook_test',
       nonce: 'world-id-request-nonce',
@@ -36,7 +38,8 @@ function verifiedMemberWorldId() {
         provider: 'world_id' as const,
         credential: 'proof_of_human' as const,
         environment: 'staging' as const,
-        nullifierDecimal: '42',
+        worldSessionId,
+        sessionNullifierDecimal: '42',
         protocolVersion: '4.0' as const,
       }),
   };
@@ -402,8 +405,14 @@ describe('Nook API', () => {
     });
   });
 
-  it('verifies and stores a profile-bound World ID Member proof without exposing its nullifier', async () => {
-    let stored: { profileId: string; nullifierDecimal: string } | undefined;
+  it('verifies and stores a profile-bound World ID Member session without exposing its identifiers', async () => {
+    let stored:
+      | {
+          profileId: string;
+          worldSessionId: string;
+          sessionNullifierDecimal: string;
+        }
+      | undefined;
     const application = createApi({
       memberWorldId: verifiedMemberWorldId(),
       worldIdVerifications: {
@@ -411,7 +420,8 @@ describe('Nook API', () => {
         record: (input) => {
           stored = {
             profileId: input.profileId,
-            nullifierDecimal: input.nullifierDecimal,
+            worldSessionId: input.worldSessionId,
+            sessionNullifierDecimal: input.sessionNullifierDecimal,
           };
           return Promise.resolve('created');
         },
@@ -441,9 +451,10 @@ describe('Nook API', () => {
     });
     expect(stored).toEqual({
       profileId: hostProfileId,
-      nullifierDecimal: '42',
+      worldSessionId,
+      sessionNullifierDecimal: '42',
     });
-    expect(JSON.stringify(response.json())).not.toContain('nullifier');
+    expect(JSON.stringify(response.json())).not.toMatch(/nullifier|session_/);
   });
 
   it('fails closed when World ID rejects the Member proof', async () => {

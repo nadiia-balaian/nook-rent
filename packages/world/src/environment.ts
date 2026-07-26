@@ -27,7 +27,6 @@ const worldIdEnvironmentSchema = z.object({
   WORLD_ID_APP_ID: z.string().startsWith('app_'),
   WORLD_ID_RP_ID: z.string().startsWith('rp_'),
   WORLD_ID_SIGNING_KEY: privateKey,
-  WORLD_ID_ACTION: z.string().trim().min(3).max(120).default('nook-member-onboarding'),
   WORLD_ID_ENVIRONMENT: z.enum(['production', 'staging', 'sandbox']).default('production'),
 });
 
@@ -49,7 +48,6 @@ export interface WorldIdEnvironment {
   appId: `app_${string}`;
   rpId: `rp_${string}`;
   signingKey: `0x${string}`;
-  action: string;
   environment: 'production' | 'staging' | 'sandbox';
 }
 
@@ -114,7 +112,6 @@ export function parseOptionalWorldIdEnvironment(
     appId: parsed.WORLD_ID_APP_ID as `app_${string}`,
     rpId: parsed.WORLD_ID_RP_ID as `rp_${string}`,
     signingKey: parsed.WORLD_ID_SIGNING_KEY as `0x${string}`,
-    action: parsed.WORLD_ID_ACTION,
     environment: parsed.WORLD_ID_ENVIRONMENT,
   };
 }

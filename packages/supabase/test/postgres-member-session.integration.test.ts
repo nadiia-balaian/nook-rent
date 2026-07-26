@@ -12,15 +12,17 @@ const SESSION_TWO_ID = '90000000-0000-4000-8000-000000000002';
 const PROFILE_ID = '10000000-0000-4000-8000-000000000001';
 const NOW = '2026-07-26T00:00:00.000Z';
 const EXPIRES_AT = '2099-07-26T00:00:00.000Z';
+const WORLD_SESSION_ID = `session_${'a'.repeat(128)}`;
 
-function worldVerification(nullifierDecimal: string) {
+function worldVerification(sessionNullifierDecimal: string, worldSessionId = WORLD_SESSION_ID) {
   return {
     provider: 'world_id' as const,
     credential: 'proof_of_human' as const,
-    action: 'nook-member-onboarding',
+    action: 'nook-member-session',
     environment: 'staging' as const,
     protocolVersion: '4.0' as const,
-    nullifierDecimal,
+    worldSessionId,
+    sessionNullifierDecimal,
     verifiedAt: NOW,
   };
 }
@@ -38,6 +40,7 @@ describeWithDatabase('Postgres Member session repository', () => {
   beforeEach(async () => {
     await sql`
       truncate table
+        nook.world_id_session_proofs,
         nook.member_sessions,
         nook.world_id_verifications,
         nook.profiles
@@ -74,7 +77,7 @@ describeWithDatabase('Postgres Member session repository', () => {
     ).resolves.toBeUndefined();
   });
 
-  it('shares a World identity between sessions only after each session proves it', async () => {
+  it('reattaches a World session only after each Member session supplies a fresh proof', async () => {
     await repository.create({
       id: SESSION_ONE_ID,
       tokenHash: 'a'.repeat(64),
@@ -100,7 +103,7 @@ describeWithDatabase('Postgres Member session repository', () => {
       sessionId: SESSION_TWO_ID,
       newProfileId: '10000000-0000-4000-8000-000000000002',
       newProfilePublicRef: 'unused-member-session-test',
-      ...worldVerification('101'),
+      ...worldVerification('102'),
     });
 
     expect(first.status).toBe('created');
@@ -137,10 +140,40 @@ describeWithDatabase('Postgres Member session repository', () => {
         sessionId: SESSION_ONE_ID,
         newProfileId: '10000000-0000-4000-8000-000000000002',
         newProfilePublicRef: 'unused-member-session-test',
-        ...worldVerification('202'),
+        ...worldVerification('202', `session_${'b'.repeat(128)}`),
       }),
     ).rejects.toMatchObject({
       conflict: 'world_id_already_bound',
+    });
+  });
+
+  it('rejects replaying one World session proof in another Member session', async () => {
+    await repository.create({
+      id: SESSION_ONE_ID,
+      tokenHash: 'a'.repeat(64),
+      expiresAt: EXPIRES_AT,
+    });
+    await repository.create({
+      id: SESSION_TWO_ID,
+      tokenHash: 'b'.repeat(64),
+      expiresAt: EXPIRES_AT,
+    });
+    await repository.authenticateWorldId({
+      sessionId: SESSION_ONE_ID,
+      newProfileId: PROFILE_ID,
+      newProfilePublicRef: 'member-session-test',
+      ...worldVerification('101'),
+    });
+
+    await expect(
+      repository.authenticateWorldId({
+        sessionId: SESSION_TWO_ID,
+        newProfileId: '10000000-0000-4000-8000-000000000002',
+        newProfilePublicRef: 'unused-member-session-test',
+        ...worldVerification('101'),
+      }),
+    ).rejects.toMatchObject({
+      conflict: 'world_id_proof_replayed',
     });
   });
 });

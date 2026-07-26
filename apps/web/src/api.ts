@@ -186,7 +186,7 @@ export interface CreatedMemberSession {
 export interface WorldIdMemberConfig {
   appId: `app_${string}`;
   rpId: `rp_${string}`;
-  action: string;
+  mode: 'session';
   environment: 'production' | 'staging' | 'sandbox';
 }
 

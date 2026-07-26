@@ -73,9 +73,10 @@ export interface CreateApiOptions {
     publicConfig(): {
       appId: `app_${string}`;
       rpId: `rp_${string}`;
-      action: string;
+      mode: 'session';
       environment: 'production' | 'staging' | 'sandbox';
     };
+    verificationKey(): string;
     createRpContext(): {
       rp_id: string;
       nonce: string;
@@ -87,8 +88,9 @@ export interface CreateApiOptions {
       provider: 'world_id';
       credential: 'proof_of_human';
       environment: 'production' | 'staging' | 'sandbox';
-      nullifierDecimal: string;
-      protocolVersion: '3.0' | '4.0';
+      worldSessionId: string;
+      sessionNullifierDecimal: string;
+      protocolVersion: '4.0';
     }>;
   };
   worldIdVerifications?: {
@@ -99,8 +101,9 @@ export interface CreateApiOptions {
       credential: 'proof_of_human';
       action: string;
       environment: 'production' | 'staging' | 'sandbox';
-      protocolVersion: '3.0' | '4.0';
-      nullifierDecimal: string;
+      protocolVersion: '4.0';
+      worldSessionId: string;
+      sessionNullifierDecimal: string;
       verifiedAt: string;
     }): Promise<'created' | 'idempotent'>;
   };
@@ -115,8 +118,9 @@ export interface CreateApiOptions {
       credential: 'proof_of_human';
       action: string;
       environment: 'production' | 'staging' | 'sandbox';
-      protocolVersion: '3.0' | '4.0';
-      nullifierDecimal: string;
+      protocolVersion: '4.0';
+      worldSessionId: string;
+      sessionNullifierDecimal: string;
       verifiedAt: string;
     }): Promise<{
       session: MemberSession;
@@ -563,7 +567,7 @@ async function requireVerifiedMember(input: {
 }): Promise<void> {
   const verified = await input.repository.isVerified({
     profileId: input.profileId,
-    action: input.verification.publicConfig().action,
+    action: input.verification.verificationKey(),
   });
 
   if (!verified) {
@@ -1048,6 +1052,7 @@ export function createApi(options: CreateApiOptions = {}): FastifyInstance {
       request,
     );
     const config = worldId.verification.publicConfig();
+    const verificationKey = worldId.verification.verificationKey();
     if (options.memberSessions) {
       const session = await requireMemberSession(options.memberSessions, request);
 
@@ -1078,7 +1083,7 @@ export function createApi(options: CreateApiOptions = {}): FastifyInstance {
     const profileId = requireLegacyProfileId(input.profileId, 'profileId');
     const humanVerified = await worldId.repository.isVerified({
       profileId,
-      action: config.action,
+      action: verificationKey,
     });
 
     if (!humanVerified) {
@@ -1103,7 +1108,7 @@ export function createApi(options: CreateApiOptions = {}): FastifyInstance {
       options.worldIdVerifications,
       request,
     );
-    const config = worldId.verification.publicConfig();
+    const verificationKey = worldId.verification.verificationKey();
 
     if (options.memberSessions) {
       const session = await requireMemberSession(options.memberSessions, request);
@@ -1118,10 +1123,11 @@ export function createApi(options: CreateApiOptions = {}): FastifyInstance {
         newProfilePublicRef: `member-${newProfileId}`,
         provider: verified.provider,
         credential: verified.credential,
-        action: config.action,
+        action: verificationKey,
         environment: verified.environment,
         protocolVersion: verified.protocolVersion,
-        nullifierDecimal: verified.nullifierDecimal,
+        worldSessionId: verified.worldSessionId,
+        sessionNullifierDecimal: verified.sessionNullifierDecimal,
         verifiedAt: new Date().toISOString(),
       });
 
@@ -1144,10 +1150,11 @@ export function createApi(options: CreateApiOptions = {}): FastifyInstance {
       profileId,
       provider: verified.provider,
       credential: verified.credential,
-      action: config.action,
+      action: verificationKey,
       environment: verified.environment,
       protocolVersion: verified.protocolVersion,
-      nullifierDecimal: verified.nullifierDecimal,
+      worldSessionId: verified.worldSessionId,
+      sessionNullifierDecimal: verified.sessionNullifierDecimal,
       verifiedAt: new Date().toISOString(),
     });
 

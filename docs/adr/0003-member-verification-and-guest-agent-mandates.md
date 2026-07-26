@@ -1,6 +1,6 @@
 # ADR 0003: Use Member verification and bounded Guest Agent mandates
 
-Status: superseded in part by ADR 0004 and ADR 0005
+Status: superseded in part by ADR 0004, ADR 0005, and ADR 0006
 
 Date: 2026-07-25
 
@@ -17,9 +17,9 @@ would also cross the product's deterministic policy boundary.
 
 ## Decision
 
-Every Host and Guest completes one action-specific World ID Member verification.
-The private action-specific nullifier binds that verification to the Member
-profile and is never returned to the browser or published as evidence.
+Every Host and Guest completes direct World ID Member verification. ADR 0006
+supersedes the original action-specific proof and nullifier mechanism with the
+World ID 4.0 session model.
 
 A Guest may then connect the configured World-backed Agent. AgentBook verifies
 the human-backed relationship and The Graph verifies the required live booking
@@ -51,5 +51,5 @@ services.
   holds.
 - World ID, World AgentKit, The Graph, Rental Reputation, and Host policy remain
   separate evidence and decision concepts.
-- The hosted database needs the Member-generalization migration, and the World
-  Developer Portal needs the `nook-member-onboarding` action before deployment.
+- The hosted database needs the Member-generalization migration. ADR 0006
+  defines the additional World session migration and relying-party setup.

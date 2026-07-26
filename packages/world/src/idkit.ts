@@ -3,24 +3,26 @@ import { z } from 'zod';
 
 import type { WorldIdEnvironment } from './environment.js';
 
-export const MEMBER_WORLD_ID_ACTION = 'nook-member-onboarding';
-export const HOST_WORLD_ID_ACTION = MEMBER_WORLD_ID_ACTION;
+export const MEMBER_WORLD_ID_SESSION = 'nook-member-session';
 
-const worldIdResponseSchema = z
+const worldIdSessionResponseSchema = z
   .object({
     identifier: z.string().min(1),
     signal_hash: z.string().regex(/^0x[0-9a-fA-F]+$/),
-    nullifier: z.string().regex(/^0x[0-9a-fA-F]+$/),
+    session_nullifier: z.tuple([
+      z.string().regex(/^0x[0-9a-fA-F]+$/),
+      z.string().regex(/^0x[0-9a-fA-F]+$/),
+    ]),
   })
   .passthrough();
 
-const worldIdResultSchema = z
+const worldIdSessionResultSchema = z
   .object({
-    protocol_version: z.enum(['3.0', '4.0']),
+    protocol_version: z.literal('4.0'),
     nonce: z.string().min(1),
-    action: z.string().min(1),
+    session_id: z.string().regex(/^session_[0-9a-fA-F]{128}$/),
     environment: z.enum(['production', 'staging', 'sandbox']),
-    responses: z.array(worldIdResponseSchema).min(1),
+    responses: z.array(worldIdSessionResponseSchema).min(1),
   })
   .passthrough();
 
@@ -38,8 +40,9 @@ export interface WorldIdVerificationResult {
   provider: 'world_id';
   credential: 'proof_of_human';
   environment: 'production' | 'staging' | 'sandbox';
-  nullifierDecimal: string;
-  protocolVersion: '3.0' | '4.0';
+  worldSessionId: string;
+  sessionNullifierDecimal: string;
+  protocolVersion: '4.0';
 }
 
 export class WorldIdMemberVerification {
@@ -52,15 +55,18 @@ export class WorldIdMemberVerification {
     return {
       appId: this.environment.appId,
       rpId: this.environment.rpId,
-      action: this.environment.action,
+      mode: 'session' as const,
       environment: this.environment.environment,
     };
+  }
+
+  verificationKey(): string {
+    return MEMBER_WORLD_ID_SESSION;
   }
 
   createRpContext(): RpContext {
     const signature = signRequest({
       signingKeyHex: this.environment.signingKey,
-      action: this.environment.action,
     });
 
     return {
@@ -76,19 +82,12 @@ export class WorldIdMemberVerification {
     proof: unknown;
     expectedSignal: string;
   }): Promise<WorldIdVerificationResult> {
-    const parsed = worldIdResultSchema.safeParse(input.proof);
+    const parsed = worldIdSessionResultSchema.safeParse(input.proof);
 
     if (!parsed.success) {
       throw new WorldIdVerificationError(
         'invalid_world_id_proof',
-        'World ID returned an invalid proof payload',
-      );
-    }
-
-    if (parsed.data.action !== this.environment.action) {
-      throw new WorldIdVerificationError(
-        'invalid_world_id_proof',
-        'World ID proof is bound to a different action',
+        'World ID returned an invalid session proof payload',
       );
     }
 
@@ -141,7 +140,8 @@ export class WorldIdMemberVerification {
       provider: 'world_id',
       credential: 'proof_of_human',
       environment: this.environment.environment,
-      nullifierDecimal: BigInt(response.nullifier).toString(10),
+      worldSessionId: parsed.data.session_id,
+      sessionNullifierDecimal: BigInt(response.session_nullifier[0]).toString(10),
       protocolVersion: parsed.data.protocol_version,
     };
   }

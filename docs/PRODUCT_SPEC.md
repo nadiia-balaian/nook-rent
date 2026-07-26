@@ -65,9 +65,9 @@ exists.
 A Member can be a Host, a Guest, or both.
 World ID verification belongs to the Member profile, not to a role. A verified
 Member who changes between Host and Guest inside the same authenticated Member
-Session is not asked to repeat the same action. A fresh browser or private
-session starts unverified and must complete World ID before the API attaches it
-to a Member profile.
+Session is not asked to repeat the proof. A fresh browser or private session
+starts unverified and must complete a World ID session proof before the API
+allows protected Member actions.
 
 ### Host
 
@@ -155,8 +155,8 @@ infer risk from missing wallet activity.
 
 World has two deliberately separate responsibilities:
 
-- World ID provides an action-specific Proof of Human for every Member before
-  protected Host or Guest actions;
+- World ID provides a World ID 4.0 session Proof of Human for every Member
+  before protected Host or Guest actions;
 - World AgentKit provides human-backed authorization for protected Guest Agent
   actions.
 
@@ -173,11 +173,11 @@ The integrations must be meaningful and end to end:
   after deterministic approval;
 - replay and repeated-hold abuse are prevented per anonymous human.
 
-World proofs are processed server-side and are not published to HCS. Member
-World ID verification stores only the private action-specific nullifier
-required to prevent reuse; the browser receives only a verified result. The
-proof signal is the server-issued Member Session ID. The browser never chooses
-the protected profile ID.
+World proofs are verified server-side and are not published to HCS. Member
+verification stores the private World Session ID for continuity and the
+one-use session nullifier for replay prevention. The proof signal is the
+server-issued Member Session ID. The browser never chooses the protected
+profile ID and does not persist World proof material.
 
 ## 10. The Graph
 

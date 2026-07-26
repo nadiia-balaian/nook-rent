@@ -134,10 +134,10 @@ configuration, signed RP contexts, same-session cross-role reuse, fresh-session
 isolation, provider rejection, direct Host and Guest gating, and protected-hold
 rechecks with controlled dependencies. PostgreSQL integration tests verify
 hashed-token lookup, proof-gated profile attachment, and rejection when a
-session attempts to switch World identity. It does not
-count as live World evidence until the Member action is installed in the
-Developer Portal, the hosted migrations are applied, and a World App proof
-succeeds end to end.
+session attempts to switch World identity. It also rejects reuse of one session
+nullifier by another Member Session. It does not count as live World evidence
+until the relying party is registered, the hosted migrations are applied, and
+a World App session proof succeeds end to end.
 
 The Phase 7 adapter suite verifies the exact Agent0 response mapping, wallet
 binding, named capability extraction, cache behavior, absent registrations,

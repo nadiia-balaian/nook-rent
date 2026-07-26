@@ -69,7 +69,14 @@ interface ListingApprovalPolicyRow {
 
 interface WorldIdVerificationRow {
   profile_id: string;
-  nullifier: string;
+  nullifier: string | null;
+  world_session_id: string | null;
+}
+
+interface WorldIdSessionProofRow {
+  session_nullifier: string;
+  world_session_id: string;
+  member_session_id: string | null;
 }
 
 interface MemberSessionRow {
@@ -165,8 +172,9 @@ export interface RecordWorldIdVerificationInput {
   credential: 'proof_of_human';
   action: string;
   environment: 'production' | 'staging' | 'sandbox';
-  protocolVersion: '3.0' | '4.0';
-  nullifierDecimal: string;
+  protocolVersion: '4.0';
+  worldSessionId: string;
+  sessionNullifierDecimal: string;
   verifiedAt: string;
 }
 
@@ -187,65 +195,101 @@ export class PostgresWorldIdVerificationRepository {
   }
 
   async record(input: RecordWorldIdVerificationInput): Promise<'created' | 'idempotent'> {
-    const [profileVerification] = await this.sql<WorldIdVerificationRow[]>`
-      select profile_id, nullifier::text
-      from nook.world_id_verifications
-      where profile_id = ${input.profileId}
-        and role = 'member'
-        and action = ${input.action}
-    `;
+    return this.sql.begin(async (transaction) => {
+      await transaction`
+        select pg_advisory_xact_lock(hashtextextended(${input.worldSessionId}, 0))
+      `;
 
-    if (profileVerification) {
-      if (profileVerification.nullifier === input.nullifierDecimal) {
-        return 'idempotent';
+      const [profileVerification] = await transaction<WorldIdVerificationRow[]>`
+        select profile_id, nullifier::text, world_session_id
+        from nook.world_id_verifications
+        where profile_id = ${input.profileId}
+          and role = 'member'
+          and action = ${input.action}
+        for update
+      `;
+      const [worldSession] = await transaction<WorldIdVerificationRow[]>`
+        select profile_id, nullifier::text, world_session_id
+        from nook.world_id_verifications
+        where world_session_id = ${input.worldSessionId}
+        for update
+      `;
+      const [proof] = await transaction<WorldIdSessionProofRow[]>`
+        select session_nullifier::text, world_session_id, member_session_id
+        from nook.world_id_session_proofs
+        where session_nullifier = ${input.sessionNullifierDecimal}
+        for update
+      `;
+
+      if (proof && proof.world_session_id !== input.worldSessionId) {
+        throw new DomainConflictError(
+          'world_id_proof_replayed',
+          'This World ID session proof was already used',
+        );
       }
 
-      throw new DomainConflictError(
-        'world_id_already_bound',
-        'This Member profile is already bound to another World ID verification',
-      );
-    }
+      if (profileVerification && profileVerification.world_session_id !== input.worldSessionId) {
+        throw new DomainConflictError(
+          'world_id_already_bound',
+          'This Member profile is already bound to another World ID session',
+        );
+      }
 
-    const [humanVerification] = await this.sql<WorldIdVerificationRow[]>`
-      select profile_id, nullifier::text
-      from nook.world_id_verifications
-      where nullifier = ${input.nullifierDecimal}
-        and action = ${input.action}
-    `;
+      if (worldSession && worldSession.profile_id !== input.profileId) {
+        throw new DomainConflictError(
+          'world_id_already_bound',
+          'This World ID session is already bound to another Member profile',
+        );
+      }
 
-    if (humanVerification && humanVerification.profile_id !== input.profileId) {
-      throw new DomainConflictError(
-        'world_id_already_bound',
-        'This World ID verification is already bound to another Member profile',
-      );
-    }
+      if (!profileVerification) {
+        await transaction`
+          insert into nook.world_id_verifications (
+            profile_id,
+            role,
+            provider,
+            credential,
+            action,
+            environment,
+            protocol_version,
+            nullifier,
+            world_session_id,
+            verified_at
+          )
+          values (
+            ${input.profileId},
+            'member',
+            ${input.provider},
+            ${input.credential},
+            ${input.action},
+            ${input.environment},
+            ${input.protocolVersion},
+            null,
+            ${input.worldSessionId},
+            ${input.verifiedAt}
+          )
+        `;
+      }
 
-    await this.sql`
-      insert into nook.world_id_verifications (
-        profile_id,
-        role,
-        provider,
-        credential,
-        action,
-        environment,
-        protocol_version,
-        nullifier,
-        verified_at
-      )
-      values (
-        ${input.profileId},
-        'member',
-        ${input.provider},
-        ${input.credential},
-        ${input.action},
-        ${input.environment},
-        ${input.protocolVersion},
-        ${input.nullifierDecimal},
-        ${input.verifiedAt}
-      )
-    `;
+      if (!proof) {
+        await transaction`
+          insert into nook.world_id_session_proofs (
+            session_nullifier,
+            world_session_id,
+            member_session_id,
+            verified_at
+          )
+          values (
+            ${input.sessionNullifierDecimal},
+            ${input.worldSessionId},
+            null,
+            ${input.verifiedAt}
+          )
+        `;
+      }
 
-    return 'created';
+      return profileVerification ? 'idempotent' : 'created';
+    });
   }
 }
 
@@ -310,36 +354,69 @@ export class PostgresMemberSessionRepository {
         throw new DomainConflictError('member_session_expired', 'The Member session has expired');
       }
 
-      const [humanVerification] = await transaction<WorldIdVerificationRow[]>`
-        select profile_id, nullifier::text
+      await transaction`
+        select pg_advisory_xact_lock(hashtextextended(${input.worldSessionId}, 0))
+      `;
+
+      const [worldSession] = await transaction<WorldIdVerificationRow[]>`
+        select profile_id, nullifier::text, world_session_id
         from nook.world_id_verifications
-        where nullifier = ${input.nullifierDecimal}
-          and action = ${input.action}
+        where world_session_id = ${input.worldSessionId}
         for update
       `;
 
       const [sessionVerification] = session.profile_id
         ? await transaction<WorldIdVerificationRow[]>`
-            select profile_id, nullifier::text
+            select profile_id, nullifier::text, world_session_id
             from nook.world_id_verifications
             where profile_id = ${session.profile_id}
               and action = ${input.action}
             for update
           `
         : [];
+      const [proof] = await transaction<WorldIdSessionProofRow[]>`
+        select session_nullifier::text, world_session_id, member_session_id
+        from nook.world_id_session_proofs
+        where session_nullifier = ${input.sessionNullifierDecimal}
+        for update
+      `;
+      const [memberSessionProof] = await transaction<WorldIdSessionProofRow[]>`
+        select session_nullifier::text, world_session_id, member_session_id
+        from nook.world_id_session_proofs
+        where member_session_id = ${input.sessionId}
+        for update
+      `;
 
       if (
-        session.profile_id &&
-        (sessionVerification?.nullifier !== input.nullifierDecimal ||
-          (humanVerification && session.profile_id !== humanVerification.profile_id))
+        proof &&
+        (proof.world_session_id !== input.worldSessionId ||
+          proof.member_session_id !== input.sessionId)
       ) {
         throw new DomainConflictError(
-          'world_id_already_bound',
-          'This Member session is already bound to another World ID verification',
+          'world_id_proof_replayed',
+          'This World ID session proof was already used by another Member session',
         );
       }
 
-      let profileId = session.profile_id ?? humanVerification?.profile_id;
+      if (
+        session.profile_id &&
+        (sessionVerification?.world_session_id !== input.worldSessionId ||
+          (worldSession && session.profile_id !== worldSession.profile_id))
+      ) {
+        throw new DomainConflictError(
+          'world_id_already_bound',
+          'This Member session is already bound to another World ID session',
+        );
+      }
+
+      if (memberSessionProof && memberSessionProof.world_session_id !== input.worldSessionId) {
+        throw new DomainConflictError(
+          'world_id_already_bound',
+          'This Member session is already bound to another World ID session',
+        );
+      }
+
+      let profileId = session.profile_id ?? worldSession?.profile_id;
       let status: 'created' | 'existing' | 'idempotent';
 
       if (profileId) {
@@ -362,6 +439,7 @@ export class PostgresMemberSessionRepository {
             environment,
             protocol_version,
             nullifier,
+            world_session_id,
             verified_at
           )
           values (
@@ -372,7 +450,25 @@ export class PostgresMemberSessionRepository {
             ${input.action},
             ${input.environment},
             ${input.protocolVersion},
-            ${input.nullifierDecimal},
+            null,
+            ${input.worldSessionId},
+            ${input.verifiedAt}
+          )
+        `;
+      }
+
+      if (!proof && !memberSessionProof) {
+        await transaction`
+          insert into nook.world_id_session_proofs (
+            session_nullifier,
+            world_session_id,
+            member_session_id,
+            verified_at
+          )
+          values (
+            ${input.sessionNullifierDecimal},
+            ${input.worldSessionId},
+            ${input.sessionId},
             ${input.verifiedAt}
           )
         `;

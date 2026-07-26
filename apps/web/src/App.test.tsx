@@ -16,8 +16,12 @@ import { setMemberSessionToken } from './api.js';
 import { ReownProvider } from './reown.js';
 
 vi.mock('@worldcoin/idkit', () => ({
-  proofOfHuman: () => ({ type: 'proof_of_human' }),
-  IDKitRequestWidget: ({
+  CredentialRequest: (type: string, options?: { signal?: string }) => ({
+    type,
+    signal: options?.signal,
+  }),
+  any: (...constraints: unknown[]) => ({ any: constraints }),
+  IDKitSessionWidget: ({
     handleVerify,
     onSuccess,
     open,
@@ -34,7 +38,7 @@ vi.mock('@worldcoin/idkit', () => ({
             const proof = {
               protocol_version: '4.0',
               nonce: 'world-id-test-nonce',
-              action: 'nook-member-onboarding',
+              session_id: `session_${'a'.repeat(128)}`,
               environment: 'staging',
               responses: [],
             };
@@ -304,7 +308,7 @@ function installMarketplaceApi(
           jsonResponse({
             appId: 'app_nook_test',
             rpId: 'rp_nook_test',
-            action: 'nook-member-onboarding',
+            mode: 'session',
             environment: 'staging',
           }),
         );

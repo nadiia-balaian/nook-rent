@@ -39,7 +39,6 @@ WORLD_AGENT_WALLET_PRIVATE_KEY=<registered Agent wallet key>
 WORLD_ID_APP_ID=<World app id>
 WORLD_ID_RP_ID=<World relying-party id>
 WORLD_ID_SIGNING_KEY=<World signing key>
-WORLD_ID_ACTION=nook-member-onboarding
 WORLD_ID_ENVIRONMENT=production
 
 THE_GRAPH_API_KEY=<gateway API key>
