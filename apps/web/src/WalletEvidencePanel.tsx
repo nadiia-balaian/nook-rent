@@ -8,7 +8,7 @@ import {
   Sparkles,
   WalletCards,
 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useAppKit, useAppKitAccount, useDisconnect } from '@reown/appkit/react';
 import { useSignMessage } from 'wagmi';
 
@@ -53,6 +53,25 @@ export function WalletAccountMenu({
   onEvidence: (evidence: WalletEvidence) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    const closeWhenOutside = (event: PointerEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    };
+
+    document.addEventListener('pointerdown', closeWhenOutside, true);
+
+    return () => {
+      document.removeEventListener('pointerdown', closeWhenOutside, true);
+    };
+  }, [open]);
 
   if (!reownConfigured) {
     return null;
@@ -64,7 +83,7 @@ export function WalletAccountMenu({
     : 'Wallet & activity';
 
   return (
-    <div className="wallet-account-menu">
+    <div className="wallet-account-menu" ref={menuRef}>
       <button
         aria-controls="wallet-account-popover"
         aria-expanded={open}

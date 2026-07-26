@@ -68,7 +68,12 @@ describe('Wallet evidence panel', () => {
   it('puts ENS and POAP evidence behind the upper-right Account control', async () => {
     const user = userEvent.setup();
 
-    render(<WalletAccountMenu evidence={evidence} onClear={vi.fn()} onEvidence={vi.fn()} />);
+    render(
+      <>
+        <WalletAccountMenu evidence={evidence} onClear={vi.fn()} onEvidence={vi.fn()} />
+        <button type="button">Outside account menu</button>
+      </>,
+    );
 
     expect(screen.getByRole('button', { name: /nook\.eth\s*2 POAPs/ })).toBeTruthy();
     expect(screen.queryByRole('dialog', { name: 'Account information' })).toBeNull();
@@ -77,5 +82,9 @@ describe('Wallet evidence panel', () => {
 
     expect(screen.getByRole('dialog', { name: 'Account information' })).toBeTruthy();
     expect(screen.getByText('The Graph · ENS mainnet')).toBeTruthy();
+
+    await user.click(screen.getByRole('button', { name: 'Outside account menu' }));
+
+    expect(screen.queryByRole('dialog', { name: 'Account information' })).toBeNull();
   });
 });
