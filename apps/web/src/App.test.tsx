@@ -768,6 +768,10 @@ describe('Nook marketplace demo', () => {
 
     await user.click(screen.getByRole('button', { name: 'Secure and fund best match' }));
     expect(await screen.findByRole('heading', { name: 'You found your nook.' })).toBeTruthy();
+    expect(screen.getByRole('status').textContent).toContain('Request approved');
+    expect(screen.getByRole('status').textContent).toContain(
+      'The nook is secured and the Guest has been notified.',
+    );
     expect(screen.getByText('HCS sequence #14')).toBeTruthy();
     expect(screen.getByRole('link', { name: /HTS transaction/ })).toBeTruthy();
     expect(screen.getByRole('link', { name: /HCS record/ })).toBeTruthy();
@@ -794,6 +798,7 @@ describe('Nook marketplace demo', () => {
 
     await user.click(screen.getByRole('button', { name: 'Approve request' }));
     expect(await screen.findByRole('heading', { name: 'You found your nook.' })).toBeTruthy();
+    expect(screen.getByRole('status').textContent).toContain('Request approved');
     expect(screen.getByText('HCS sequence #14')).toBeTruthy();
   });
 

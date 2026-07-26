@@ -259,6 +259,7 @@ export function App() {
     useState<WorldIdMemberVerification | null>(null);
   const [walletEvidence, setWalletEvidence] = useState<WalletEvidence | null>(null);
   const [memberSession, setMemberSession] = useState<MemberSession | null>(null);
+  const [approvalNotificationVisible, setApprovalNotificationVisible] = useState(false);
 
   const checkApi = async () => {
     setApiStatus('checking');
@@ -273,6 +274,13 @@ export function App() {
   useEffect(() => {
     void checkApi();
   }, []);
+
+  useEffect(() => {
+    if (!approvalNotificationVisible) return;
+
+    const timeout = window.setTimeout(() => setApprovalNotificationVisible(false), 5000);
+    return () => window.clearTimeout(timeout);
+  }, [approvalNotificationVisible]);
 
   useEffect(() => {
     let active = true;
@@ -499,6 +507,7 @@ export function App() {
     setMemberWorldIdOpen(false);
     setMemberWorldIdVerification(null);
     setWalletEvidence(null);
+    setApprovalNotificationVisible(false);
     setSelectedListing(null);
     setQuote(null);
     setReservation(null);
@@ -582,6 +591,9 @@ export function App() {
     setReservation(result.reservation);
     setAgentPaymentMandate(result.paymentMandate);
     setDeposit(result.deposit ?? null);
+    if (result.reservation.bookingRequest.status === 'approved') {
+      setApprovalNotificationVisible(true);
+    }
     navigate(result.deposit?.operation.status === 'confirmed' ? 'confirmed' : 'booking');
   };
 
@@ -597,6 +609,9 @@ export function App() {
     if (result) {
       setAgentPaymentMandate(null);
       setReservation(result);
+      if (result.bookingRequest.status === 'approved') {
+        setApprovalNotificationVisible(true);
+      }
       navigate('booking');
     }
   };
@@ -663,6 +678,9 @@ export function App() {
         booking: result.booking,
         hold: result.hold,
       });
+      if (decision === 'approved') {
+        setApprovalNotificationVisible(true);
+      }
       if (result.deposit?.operation.status === 'confirmed') {
         setRole('guest');
         navigate('confirmed');
@@ -969,6 +987,16 @@ export function App() {
           onClearWalletEvidence={() => setWalletEvidence(null)}
           onWalletEvidence={setWalletEvidence}
         />
+      )}
+
+      {approvalNotificationVisible && (
+        <div className="approval-notification" role="status" aria-live="polite">
+          <CheckCircle2 size={22} />
+          <div>
+            <strong>Request approved</strong>
+            <span>The nook is secured and the Guest has been notified.</span>
+          </div>
+        </div>
       )}
 
       <main className={`screen-stage ${compact ? 'compact' : ''} ${wide ? 'wide' : ''}`}>
