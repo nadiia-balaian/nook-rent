@@ -40,7 +40,18 @@ A one-time, Member-approved instruction that gives an Agent bounded authority
 to act within validated constraints. A Guest Agent Mandate may include city,
 dates, occupancy, budget, and required amenities. It may select from valid
 Listings, accept the deterministic Booking Quote, and request one Reservation
-Hold. It cannot alter price, dates, Host policy, payment authority, or approval.
+Hold. When the Guest also creates an Agent Payment Mandate, it may settle the
+stored deposit after deterministic approval. It cannot alter price, dates,
+Host policy, payment terms, or approval.
+
+### Agent Payment Mandate
+
+A one-use, Guest-approved financial authorization attached to one Agent
+Mandate. It is bound to one Booking, Booking Quote, settlement token, maximum
+deposit, Agent, and expiry. The Agent may consume it only to fund the exact
+stored Booking deposit after deterministic Host policy or explicit Host review
+approves the request. The Agent never supplies the amount, recipient, token, or
+approval result. Consumption is recorded with the durable financial Operation.
 
 ### Human-backed authorization
 

@@ -38,6 +38,7 @@ import {
 
 import {
   type AgentExecution,
+  type AgentPaymentMandate,
   type AgentSecureMatchResult,
   type BookingQuote,
   type DepositResult,
@@ -55,7 +56,13 @@ import {
   type WorldIdMemberVerification,
   type WorldIdRpContext,
 } from './api.js';
-import { DEFAULT_GUEST_QUERY, DEFAULT_SEARCH, DEMO_PROFILES, type DemoGuestKey } from './demo.js';
+import {
+  AGENT_PAYMENT_CAP_ATOMIC,
+  DEFAULT_GUEST_QUERY,
+  DEFAULT_SEARCH,
+  DEMO_PROFILES,
+  type DemoGuestKey,
+} from './demo.js';
 import { WalletAccountMenu } from './WalletEvidencePanel.js';
 
 type DemoRole = 'guest' | 'host';
@@ -216,6 +223,7 @@ export function App() {
   const [quote, setQuote] = useState<BookingQuote | null>(null);
   const [reservation, setReservation] = useState<ReservationResult | null>(null);
   const [deposit, setDeposit] = useState<DepositResult | null>(null);
+  const [agentPaymentMandate, setAgentPaymentMandate] = useState<AgentPaymentMandate | null>(null);
   const [listingDraft, setListingDraft] = useState(initialListingDraft);
   const [hostAgentDraft, setHostAgentDraft] = useState<HostAgentDraftResult | null>(null);
   const [createdListing, setCreatedListing] = useState<ListingDetail | null>(null);
@@ -308,6 +316,7 @@ export function App() {
     setQuote(null);
     setReservation(null);
     setDeposit(null);
+    setAgentPaymentMandate(null);
     setListingDraft(initialListingDraft);
     setHostAgentDraft(null);
     setCreatedListing(null);
@@ -427,6 +436,7 @@ export function App() {
     setQuote(null);
     setReservation(null);
     setDeposit(null);
+    setAgentPaymentMandate(null);
     setError(null);
     navigate('identity');
   };
@@ -437,6 +447,7 @@ export function App() {
     setQuote(null);
     setReservation(null);
     setDeposit(null);
+    setAgentPaymentMandate(null);
 
     const result = await runAction('search', () => nookApi.searchWithGuestAgent(guestQuery));
     if (!result) return;
@@ -464,6 +475,7 @@ export function App() {
     setSelectedListing(listing);
     setReservation(null);
     setDeposit(null);
+    setAgentPaymentMandate(null);
     const result = await runAction('quote', () =>
       nookApi.createQuote({
         listingId: listing.id,
@@ -484,6 +496,7 @@ export function App() {
         guestProfileId: selectedGuest.id,
         query: guestQuery,
         idempotencyKey: `nook-agent-${selectedGuest.id}-${search.checkIn}-${search.checkOut}`,
+        maximumDepositAtomic: AGENT_PAYMENT_CAP_ATOMIC,
       }),
     );
 
@@ -502,7 +515,9 @@ export function App() {
     setSelectedListing(result.selectedMatch.listing);
     setQuote(result.quote);
     setReservation(result.reservation);
-    navigate('booking');
+    setAgentPaymentMandate(result.paymentMandate);
+    setDeposit(result.deposit ?? null);
+    navigate(result.deposit?.operation.status === 'confirmed' ? 'confirmed' : 'booking');
   };
 
   const reserveDates = async () => {
@@ -515,6 +530,7 @@ export function App() {
       }),
     );
     if (result) {
+      setAgentPaymentMandate(null);
       setReservation(result);
       navigate('booking');
     }
@@ -575,12 +591,18 @@ export function App() {
     );
 
     if (result) {
+      setAgentPaymentMandate(result.paymentMandate ?? agentPaymentMandate);
+      setDeposit(result.deposit ?? null);
       setReservation({
         ...reservation,
         bookingRequest: result.bookingRequest,
         booking: result.booking,
         hold: result.hold,
       });
+      if (result.deposit?.operation.status === 'confirmed') {
+        setRole('guest');
+        navigate('confirmed');
+      }
     }
   };
 
@@ -795,6 +817,7 @@ export function App() {
           <ResultsScreen
             agentSearch={guestAgentSearch}
             agentBusy={busyAction === 'reserve'}
+            agentPaymentCapAtomic={AGENT_PAYMENT_CAP_ATOMIC}
             busy={busyAction === 'quote'}
             error={error}
             guestKey={guestKey}
@@ -821,6 +844,7 @@ export function App() {
       case 'booking':
         return reservation ? (
           <BookingScreen
+            agentPaymentMandate={agentPaymentMandate}
             busyAction={busyAction}
             deposit={deposit}
             error={error}
@@ -1834,6 +1858,7 @@ function GuestSearchScreen({
 
 function ResultsScreen({
   agentBusy,
+  agentPaymentCapAtomic,
   agentSearch,
   busy,
   error,
@@ -1846,6 +1871,7 @@ function ResultsScreen({
   selectedListing,
 }: {
   agentBusy: boolean;
+  agentPaymentCapAtomic: string;
   agentSearch: GuestAgentSearchResult | null;
   busy: boolean;
   error: NookApiError | null;
@@ -1904,17 +1930,20 @@ function ResultsScreen({
         <div className="agentic-action-card">
           <div>
             <span className="demo-tag">Agentic action</span>
-            <strong>Let your Agent secure the best match</strong>
-            <small>It can select, quote, and hold one home within this mandate.</small>
+            <strong>Let your Agent secure and fund the best match</strong>
+            <small>
+              One Booking, one deposit, up to {formatAtomicUnits(agentPaymentCapAtomic)} Testnet
+              units.
+            </small>
           </div>
           <button className="primary-button" disabled={agentBusy} type="button" onClick={onSecure}>
             {agentBusy ? (
               <>
-                <LoaderCircle className="spin" size={17} /> Securing dates…
+                <LoaderCircle className="spin" size={17} /> Securing and funding…
               </>
             ) : (
               <>
-                Secure best match <Sparkles size={17} />
+                Secure and fund best match <Sparkles size={17} />
               </>
             )}
           </button>
@@ -2138,6 +2167,7 @@ function DetailScreen({
 }
 
 function BookingScreen({
+  agentPaymentMandate,
   busyAction,
   deposit,
   error,
@@ -2148,6 +2178,7 @@ function BookingScreen({
   onReconcile,
   reservation,
 }: {
+  agentPaymentMandate: AgentPaymentMandate | null;
   busyAction: BusyAction;
   deposit: DepositResult | null;
   error: NookApiError | null;
@@ -2185,14 +2216,18 @@ function BookingScreen({
             ? 'Request declined.'
             : manual
               ? 'Your Host will review this.'
-              : 'Approved—your deposit is next.'}
+              : agentPaymentMandate
+                ? 'Your Agent is settling the deposit.'
+                : 'Approved—your deposit is next.'}
         </h1>
         <p>
           {rejected
             ? 'The hold was released and the dates are available again.'
             : manual
               ? 'The dates are protected while the Host reviews this Newcomer request.'
-              : 'The stored Host policy approved this request. Fund the exact Testnet deposit to confirm.'}
+              : agentPaymentMandate
+                ? 'The stored Host policy approved this request. Your bounded mandate triggered the exact Testnet deposit.'
+                : 'The stored Host policy approved this request. Fund the exact Testnet deposit to confirm.'}
         </p>
       </div>
 
@@ -2218,7 +2253,13 @@ function BookingScreen({
             <StatusStep
               active={Boolean(operationPending)}
               label="Hedera deposit"
-              text={deposit ? `Operation ${deposit.operation.status}` : 'Runs only after approval'}
+              text={
+                deposit
+                  ? `Operation ${deposit.operation.status}`
+                  : agentPaymentMandate
+                    ? 'Mandate authorized; waits only for approval'
+                    : 'Runs only after approval'
+              }
             />
           </ol>
         </article>
@@ -2246,7 +2287,13 @@ function BookingScreen({
           <EvidenceRow
             live={deposit?.operation.status === 'confirmed'}
             label="Hedera"
-            value={deposit ? `Operation ${deposit.operation.status}` : 'Awaiting deposit'}
+            value={
+              deposit
+                ? `Operation ${deposit.operation.status}`
+                : agentPaymentMandate
+                  ? `Mandate ${agentPaymentMandate.status}`
+                  : 'Awaiting deposit'
+            }
           />
         </aside>
       </div>
@@ -2259,7 +2306,7 @@ function BookingScreen({
             Open Host review <ArrowRight size={17} />
           </button>
         )}
-        {reservation.booking.status === 'awaiting_deposit' && !deposit && (
+        {reservation.booking.status === 'awaiting_deposit' && !deposit && !agentPaymentMandate && (
           <button
             className="primary-button"
             disabled={busyAction !== null}

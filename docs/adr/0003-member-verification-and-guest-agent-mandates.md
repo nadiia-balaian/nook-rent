@@ -1,6 +1,6 @@
 # ADR 0003: Use Member verification and bounded Guest Agent mandates
 
-Status: accepted
+Status: superseded by ADR 0004
 
 Date: 2026-07-25
 

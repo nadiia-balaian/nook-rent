@@ -22,7 +22,7 @@ Nook.rent
   -> availability, approval, price, and Rental Reputation
 
 Hedera
-  -> escrow, payment, scheduling, public evidence, and read-back
+  -> escrow, payment, public evidence, and read-back
 ```
 
 ## Hedera
@@ -35,18 +35,22 @@ Official page:
 Target evidence:
 
 - Guest Agent triggers at least one real HTS financial operation on Testnet;
+- Guest gives one bounded authorization and does not press a separate payment
+  button after approval;
 - all financial parameters come from stored Booking terms;
+- the mandate is limited to one Booking, token, maximum deposit, and expiry;
 - the payment is idempotent and recoverable;
 - demo video shows the Agent action and HashScan result;
 - public repository explains the complete flow.
 
-Enhancements already aligned with Nook.rent:
+Enhancements implemented locally:
 
 - HTS test token;
-- Scheduled Transactions where useful;
 - HCS payment and Booking audit trail;
 - human-backed Agent identity;
 - multi-Agent Host and Guest workflow.
+
+Scheduled Transactions are not part of the current evidence claim.
 
 ### Secondary: No Solidity Allowed
 
@@ -58,7 +62,7 @@ Target evidence:
 - use Mirror Node evidence;
 - keep the baseline free of Solidity.
 
-Nook.rent intends to demonstrate HTS, HCS, Schedule Service, and Mirror Node.
+Nook.rent demonstrates HTS, HCS, and Mirror Node without Solidity.
 
 ### Not targeted
 
@@ -165,13 +169,15 @@ registration bound to the human-backed signing wallet and the named
    dates and automatic-approval policy.
 2. Guest completes World ID Member verification and connects the Guest Agent.
 3. Guest Agent searches for a valid 3–90-night stay.
-4. Guest authorizes one Agent Mandate to secure the top valid match.
+4. Guest authorizes one secure-and-fund Agent Mandate with the displayed
+   Testnet deposit cap.
 5. Unverified Member or Agent attempts a hold and is denied.
 6. World proves the Agent is human-backed.
 7. The Graph returns its live Agent registration and capability.
 8. Nook.rent atomically holds the dates.
 9. Stored policy uses Rental Reputation to auto-approve the experienced Guest.
-10. Guest funds the real Hedera Testnet deposit.
+10. After deterministic approval, the Agent triggers the exact stored Hedera
+    Testnet deposit without a second payment click.
 11. Booking is confirmed with Mirror Node and HCS evidence.
 12. A Newcomer request demonstrates the fair Host-review path.
 

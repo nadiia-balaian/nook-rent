@@ -8,7 +8,7 @@ the scarce action in the Guest flow:
 ```text
 direct Guest World ID Member verification
   -> public Listing search
-  -> Guest authorizes one bounded secure-best-match mandate
+  -> Guest authorizes one bounded secure-and-fund mandate
   -> public deterministic quote
   -> 402 AgentKit challenge
   -> Guest Agent signs the challenge
@@ -16,6 +16,7 @@ direct Guest World ID Member verification
   -> AgentBook confirms that the Agent is human-backed
   -> database consumes the nonce and enforces one active hold per human
   -> Reservation Hold is created
+  -> separate Agent Payment Mandate waits for deterministic approval
 ```
 
 The browser and HCS never receive the Agent address, World human identifier,
@@ -36,11 +37,14 @@ calls `POST /v1/agents/guest/world-connection`. This performs a live AgentBook
 lookup and a live The Graph Agent0 capability check. It returns only safe
 public verification states and network labels. The Guest may later call
 `POST /v1/agents/guest/secure-match` to let the Agent select the top valid match,
-create its deterministic quote, and request one hold. The manual path calls
-`POST /v1/agents/guest/reservation-holds`. The server-side Guest Agent then calls
-the protected Reservation Hold resource through the official AgentKit client,
-handles the `402` challenge, signs it with the server-only Agent wallet, and
-retries. The browser never signs or receives Agent wallet material.
+create its deterministic quote, request one hold, and create a separate bounded
+Agent Payment Mandate. The manual path calls
+`POST /v1/agents/guest/reservation-holds`. The server-side Guest Agent then
+calls the protected Reservation Hold resource through the official AgentKit
+client, handles the `402` challenge, signs it with the server-only Agent wallet,
+and retries. World authorizes the protected Agent action; Hedera settlement
+uses the separate mandate and stored Booking terms. The browser never signs or
+receives Agent or Hedera wallet material.
 
 ## Implemented
 
@@ -48,7 +52,7 @@ retries. The browser never signs or receives Agent wallet material.
 - direct Guest Member verification before Agent connection or protected hold;
 - explicit UI connection step backed by live AgentBook and Agent0 checks;
 - server-side Guest Agent bridge for the browser demo flow;
-- bounded, idempotent secure-best-match Agent Mandate;
+- bounded, idempotent secure-and-fund Agent Mandate;
 - five-minute World Chain challenge bound to the Reservation Hold URL;
 - signed-message validation and signature verification;
 - AgentBook lookup on World Chain;
@@ -146,6 +150,9 @@ Verified on 2026-07-25 against AgentBook on World Chain:
 
 No private key, World human identifier, signed header, nonce, database URL, or
 human-reference hash is recorded.
+
+This evidence predates Agent Payment Mandates. A fresh combined World and
+Hedera run is still required to prove the autonomous settlement path.
 
 ## Evidence to capture
 

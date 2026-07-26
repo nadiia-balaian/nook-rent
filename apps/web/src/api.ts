@@ -298,6 +298,17 @@ export interface DepositResult {
       };
 }
 
+export interface AgentPaymentMandate {
+  id: string;
+  bookingId: string;
+  tokenId: string;
+  maximumDepositAtomic: string;
+  status: 'active' | 'consumed' | 'expired' | 'cancelled';
+  expiresAt: string;
+  operationId?: string;
+  consumedAt?: string;
+}
+
 export interface SearchInput {
   city: string;
   checkIn: string;
@@ -380,6 +391,8 @@ export type AgentSecureMatchResult =
       };
       quote: BookingQuote;
       reservation: ReservationResult;
+      paymentMandate: AgentPaymentMandate;
+      deposit?: DepositResult;
       agent: Extract<GuestAgentSearchResult, { status: 'ready' }>['agent'];
     };
 
@@ -489,7 +502,12 @@ export const nookApi = {
       body: JSON.stringify({ query }),
     }),
 
-  secureBestMatch: (input: { guestProfileId: string; query: string; idempotencyKey: string }) =>
+  secureBestMatch: (input: {
+    guestProfileId: string;
+    query: string;
+    idempotencyKey: string;
+    maximumDepositAtomic: string;
+  }) =>
     request<AgentSecureMatchResult>('/v1/agents/guest/secure-match', {
       method: 'POST',
       headers: {
@@ -498,6 +516,10 @@ export const nookApi = {
       body: JSON.stringify({
         guestProfileId: input.guestProfileId,
         query: input.query,
+        paymentMandate: {
+          authorized: true,
+          maximumDepositAtomic: input.maximumDepositAtomic,
+        },
       }),
     }),
 
@@ -548,6 +570,8 @@ export const nookApi = {
       bookingRequest: ReservationResult['bookingRequest'];
       booking: Booking;
       hold: ReservationResult['hold'];
+      paymentMandate?: AgentPaymentMandate;
+      deposit?: DepositResult;
     }>(`/v1/booking-requests/${input.requestId}/decision`, {
       method: 'POST',
       body: JSON.stringify({

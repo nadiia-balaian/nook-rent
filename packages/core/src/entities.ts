@@ -117,6 +117,25 @@ export interface Booking {
   updatedAt: string;
 }
 
+export type AgentPaymentMandateStatus = 'active' | 'consumed' | 'expired' | 'cancelled';
+
+export interface AgentPaymentMandate {
+  id: string;
+  idempotencyKey: string;
+  guestProfileId: string;
+  agentAddress: string;
+  bookingId: string;
+  quoteId: string;
+  tokenId: string;
+  maximumDeposit: TokenAmount;
+  status: AgentPaymentMandateStatus;
+  expiresAt: string;
+  operationId?: string;
+  consumedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export type ExternalOperationStatus =
   'pending' | 'reserved' | 'submitted' | 'confirmed' | 'failed' | 'reconciling';
 

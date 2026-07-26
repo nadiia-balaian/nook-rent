@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { createMarketplaceAgentPorts, parseOptionalAiEnvironment } from '@nook-rent/ai';
 import { parseDatabaseEnvironment, parseServerEnvironment } from '@nook-rent/config';
 import {
+  AgentPaymentMandateService,
   BookingDepositService,
   MarketplaceAgentService,
   MarketplaceService,
@@ -17,6 +18,7 @@ import {
 import {
   createPostgresClient,
   PostgresAvailabilityWindowRepository,
+  PostgresAgentPaymentMandateRepository,
   PostgresBookingQuoteRepository,
   PostgresBookingRepository,
   PostgresBookingRequestRepository,
@@ -55,16 +57,29 @@ const serverEnvironment = parseServerEnvironment(process.env);
 const databaseEnvironment = parseDatabaseEnvironment(process.env);
 const sql = createPostgresClient(databaseEnvironment.connectionString);
 const bookings = new PostgresBookingRepository(sql);
+const holds = new PostgresReservationHoldRepository(sql);
+const paymentMandateRepository = new PostgresAgentPaymentMandateRepository(sql);
 const marketplace = new MarketplaceService({
   profiles: new PostgresMemberProfileRepository(sql),
   listings: new PostgresListingRepository(sql),
   availability: new PostgresAvailabilityWindowRepository(sql),
   approvalPolicies: new PostgresListingApprovalPolicyRepository(sql),
   quotes: new PostgresBookingQuoteRepository(sql),
-  holds: new PostgresReservationHoldRepository(sql),
+  holds,
   bookingRequests: new PostgresBookingRequestRepository(sql),
   bookings,
   reputation: new PostgresRentalReputationRepository(sql),
+  clock: {
+    now: () => new Date().toISOString(),
+  },
+  ids: {
+    next: () => randomUUID(),
+  },
+});
+const agentPaymentMandates = new AgentPaymentMandateService({
+  bookings,
+  holds,
+  mandates: paymentMandateRepository,
   clock: {
     now: () => new Date().toISOString(),
   },
@@ -150,6 +165,7 @@ const deposits =
           next: () => randomUUID(),
         },
         escrowRecipientRef: hederaEnvironment.escrowAccountId.toString(),
+        paymentMandates: paymentMandateRepository,
       })
     : undefined;
 const app = createApi({
@@ -159,6 +175,7 @@ const app = createApi({
   allowedOrigins: serverEnvironment.allowedOrigins,
   marketplace,
   marketplaceAgents,
+  agentPaymentMandates,
   ...(deposits ? { deposits } : {}),
   ...(hederaEnvironment ? { hederaTopicId: hederaEnvironment.topicId.toString() } : {}),
   ...(humanBackedAuthorization && worldEnvironment

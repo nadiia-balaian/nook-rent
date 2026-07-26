@@ -1,6 +1,7 @@
 # Nook.rent implementation plan
 
-Status: active; Phases 0–7 complete, Phase 8 implemented; live smoke pending
+Status: active; Phases 0–7 complete, Phases 8–9 implemented locally; hosted and
+live smoke checks pending
 Strategy: build one end-to-end tracer bullet, then deepen it
 
 ## Completion rule
@@ -398,7 +399,51 @@ Remaining live exit:
 - confirm the API reports live execution without exposing prompts, keys, or raw
   provider responses.
 
-## Phase 9: Rental Reputation
+## Phase 9: bounded Agent payments
+
+Estimate: 3–5 focused hours
+
+Status: implemented locally on 2026-07-26; hosted migration and live Testnet
+Agent-payment evidence pending.
+
+Implement:
+
+- accept one explicit Guest secure-and-fund authorization with a maximum
+  Testnet deposit;
+- persist a one-use Agent Payment Mandate bound to one Guest, Agent, Booking,
+  quote, token, amount cap, and expiry;
+- automatically settle the exact stored deposit after automatic approval;
+- retain an active mandate through fair Host review and settle after Host
+  approval;
+- consume the mandate atomically with durable Operation preparation;
+- preserve the manual deposit path.
+
+Exit check:
+
+- the browser Agent path confirms an automatically approved Booking without a
+  second funding click;
+- expired, consumed, mismatched, or insufficient mandates fail before ledger
+  submission;
+- retries cannot create a second Operation or transfer;
+- a hosted run produces a fresh HTS transaction, Mirror Node confirmation, and
+  HCS evidence attributable to the Agent action.
+
+Implemented locally:
+
+- core Agent Payment Mandate entity, policy service, and repository port;
+- PostgreSQL mandate persistence and atomic one-use consumption;
+- API orchestration for automatic and Host-reviewed settlement;
+- guided secure-and-fund UI with bounded authorization copy;
+- focused core, API, browser, and PostgreSQL integration tests.
+
+Remaining live exit:
+
+- apply migration `202607260012_agent_payment_mandates.sql` to the intended
+  hosted database;
+- run one explicitly approved Hedera Testnet Agent payment;
+- record fresh HashScan and HCS evidence without exposing private data.
+
+## Phase 10: Rental Reputation
 
 Estimate: 3–5 focused hours
 
@@ -420,7 +465,7 @@ Exit check:
 - conflicting duplicates fail visibly;
 - World and Graph signals do not change Rental Reputation.
 
-## Phase 10: hardening and submission
+## Phase 11: hardening and submission
 
 Estimate: 4–6 focused hours
 
@@ -446,13 +491,13 @@ If time is limited, protect this path:
 seeded Listing
   -> direct Guest World ID Member verification
   -> Guest Agent search
-  -> one secure-best-match Agent Mandate
+  -> one bounded secure-and-fund Agent Mandate
   -> World rejects unverified Agent
   -> World accepts human-backed Agent
   -> The Graph returns live Agent registration
   -> atomic hold
   -> deterministic approval
-  -> real Hedera deposit
+  -> Agent-triggered real Hedera deposit without a second click
   -> confirmed Booking and evidence
 ```
 
@@ -479,15 +524,16 @@ Provider access or registration delays may add time.
 
 ## Next coding task
 
-Create the `nook-member-onboarding` World action, apply the two pending World ID
-migrations, live-test both role onboarding paths, and then deploy the updated
-API and web application. Complete the Phase 8 live OpenAI smoke test after that.
-The real Phase 9 projection may follow after the UI tracer is ready:
+Apply the pending hosted migrations, live-test both Member onboarding paths,
+run the bounded Agent Payment Mandate flow on Hedera Testnet, and then deploy
+the updated API and web application. Complete the Phase 8 live OpenAI smoke
+test after that. The real Phase 10 projection may follow after the UI tracer is
+ready:
 
 ```text
 chore: harden deployed demo flow
 ```
 
-Until Phase 9 is implemented, seeded tiers must stay labeled as demo data and
+Until Phase 10 is implemented, seeded tiers must stay labeled as demo data and
 must never be presented as live HCS evidence. World and Graph signals remain
 separate.

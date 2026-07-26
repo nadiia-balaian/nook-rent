@@ -21,21 +21,22 @@ host describes a home
   -> Guest connects a human-backed agent
   -> Guest may add consented public wallet evidence
   -> guest agent searches available listings
-  -> Guest authorizes one secure-best-match mandate
+  -> Guest authorizes one secure-and-fund mandate with a deposit cap
   -> agent selects the top valid listing and requests a hold
   -> The Graph verifies live agent and onchain signals
   -> World rechecks that the agent is human-backed
   -> Nook.rent creates an expiring reservation hold
   -> stored host policy selects automatic approval or host review
-  -> Hedera locks the deposit and records verifiable evidence
+  -> agent automatically triggers the exact stored Hedera deposit after approval
+  -> Hedera records verifiable payment evidence
   -> booking is confirmed
   -> checkout and verified rental behavior update Rental Reputation
 ```
 
 ## Sponsor responsibilities
 
-- **Hedera:** real Testnet escrow, booking payment, scheduled operations, HCS
-  evidence, and Mirror Node verification.
+- **Hedera:** real Testnet escrow, booking payment, HCS evidence, and Mirror
+  Node verification.
 - **World:** private Member Proof of Human for both roles and human-backed Guest
   Agent authorization before scarce dates or funds can be controlled.
 - **The Graph:** live agent registration, wallet binding, capabilities, and
@@ -47,9 +48,10 @@ rental behavior.
 
 ## Repository status
 
-Phases 1–7 are complete and Phase 8 is implemented. Hedera, World AgentKit, and
-The Graph have produced verified live evidence; the constrained OpenAI path is
-ready for one opt-in live smoke test:
+Phases 1–7 are complete, and Phases 8–9 are implemented locally. Hedera, World
+AgentKit, and The Graph have produced verified live evidence for the earlier
+flow; the bounded Agent-payment path, later hosted migrations, and constrained
+OpenAI path still need explicit opt-in live runs:
 
 - `pnpm` TypeScript monorepo and shared quality gate;
 - Fastify API shell with a tested health endpoint;
@@ -90,7 +92,13 @@ ready for one opt-in live smoke test:
   flow, server-signed RP context, server-side proof verification, and private
   nullifier storage;
 - one-time Guest Agent Mandate that selects the top database-valid match,
-  creates its deterministic quote, and requests one protected hold;
+  creates its deterministic quote, requests one protected hold, and authorizes
+  at most one displayed Testnet deposit;
+- durable Agent Payment Mandate bound to one Booking, quote, Agent, token,
+  maximum deposit, and expiry;
+- automatic deposit settlement after stored automatic approval or explicit Host
+  approval, with the manual funding route preserved;
+- atomic one-use mandate consumption with the durable Hedera Operation;
 - direct Agent0 queries through The Graph on Base Sepolia;
 - active registration, signing-wallet/owner/operator binding, and named booking
   capability enforcement;
@@ -115,10 +123,10 @@ ready for one opt-in live smoke test:
   deposit, token, recipient, or an invalid Listing.
 
 The first five database migrations are applied to the isolated `nook` schema in
-hosted Supabase. The World ID table and Member-generalization migrations are
-implemented locally and still need an explicit hosted apply. The pseudonymous
-demo seed contains three profiles, two Lisbon Listings with the Nook.rent HTS
-token, and their availability windows.
+hosted Supabase. Later Member-verification, demo-data, hold-lifecycle, and Agent
+Payment Mandate migrations are implemented locally and still need an explicit
+hosted apply. The pseudonymous demo seed contains three profiles, two Lisbon
+Listings with the Nook.rent HTS token, and their availability windows.
 
 Monorepo layout:
 
@@ -131,7 +139,7 @@ packages/
   core/                domain rules, use cases, and provider ports
   config/              typed environment configuration
   ai/                  constrained listing and matching adapters
-  hedera/              HTS, HCS, Schedule Service, and Mirror Node
+  hedera/              HTS, HCS, and Mirror Node
   world/               AgentKit and human-backed authorization
   the-graph/           live Subgraph queries and signal mapping
   poap/                wallet-control proof and public POAP history

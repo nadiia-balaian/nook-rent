@@ -7,6 +7,12 @@ Network: Hedera Testnet
 Status: resource setup, live Booking deposit, HCS evidence, and idempotent retry
 verified
 
+The live evidence below predates the bounded Agent Payment Mandate. It proves
+the Hedera deposit and evidence infrastructure, not autonomous Agent-triggered
+settlement. The new local Agent-payment flow requires the pending database
+migration and a fresh explicitly approved Testnet run before that claim is
+live.
+
 ## Public resources
 
 - HTS demo settlement token:

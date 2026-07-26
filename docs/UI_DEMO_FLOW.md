@@ -34,18 +34,20 @@ Splash
   -> select a seeded demo Rental Reputation profile
   -> natural-language Guest Agent search
   -> database-filtered Listing results
-  -> Guest authorizes one secure-best-match Agent Mandate
+  -> Guest authorizes one secure-and-fund Agent Mandate with a Testnet deposit cap
   -> Agent selects the top valid result and creates the exact Booking Quote
   -> Guest Agent receives the World AgentKit challenge and signs one protected hold
   -> live Agent0 check through The Graph
   -> stored Host policy returns automatic approval or fair Host review
-  -> Hedera Testnet deposit
+  -> Agent automatically triggers the exact stored Hedera Testnet deposit
   -> confirmed Booking and explorer evidence
 ```
 
 The manual Listing detail and quote path remains available for comparison. The
 Agentic path uses the same deterministic quote, hold, availability, and approval
-services.
+services. The secure-and-fund action is the Guest's payment authorization; the
+Agent path does not show a second “Fund deposit” button. For Host review, the
+mandate waits until the Host approves and then settles automatically.
 
 ## Evidence labels
 

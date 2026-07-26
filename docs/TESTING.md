@@ -9,6 +9,7 @@ Pure, deterministic tests for:
 - local date parsing and night count;
 - 3-night minimum and 90-night maximum;
 - exact price and deposit arithmetic;
+- Agent Payment Mandate authorization, expiry, binding, and cap validation;
 - Approval Policy;
 - Listing, hold, Booking, escrow, and payment state machines;
 - Rental Reputation ordering and deduplication;
@@ -33,6 +34,7 @@ The deposit Operation suite additionally proves:
 
 - one prepared Operation, Escrow, and deposit Payment per Booking;
 - idempotent preparation with immutable token, amount, and receiver terms;
+- atomic one-use Agent Payment Mandate consumption with Operation preparation;
 - atomic Booking confirmation, Hold conversion, Escrow funding, and Payment
   confirmation.
 
@@ -75,13 +77,15 @@ Exercise the deployed web and API:
 - Host must complete World ID Member verification before Listing creation;
 - Guest must complete World ID Member verification before Agent connection;
 - Guest searches and accepts a quote;
-- Guest may authorize one Agent Mandate to select, quote, and hold the top valid
-  match;
+- Guest may authorize one Agent Mandate to select, quote, hold, and fund at most
+  the displayed deposit for the top valid match;
 - unverified Agent is denied;
 - verified Agent creates a hold;
 - automatic approval succeeds for an experienced Guest;
 - Newcomer is routed to Host review;
-- deposit confirms the Booking;
+- the Agent automatically triggers the exact deposit after automatic or Host
+  approval;
+- the manual path can still fund a deposit explicitly;
 - conflicting dates fail;
 - expired hold releases dates;
 - evidence links render.
@@ -94,12 +98,12 @@ conflicting-date rejection.
 The Phase 4 browser-component suite exercises the guided onboarding and role
 selection, required World ID Member verification for both roles, required
 World-backed Guest Agent and Agent0 capability verification, compact
-verification badges, Guest search, secure-best-match Agent Mandate, quote
-presentation, automatic approval,
-Newcomer Host review, the explicit Host decision handoff, Host Agent
-review-before-publish, deposit confirmation, and HTS/HCS evidence links. Manual
-visual QA additionally covers the desktop and 390px mobile layouts using the
-real local API with OpenAI disabled so deterministic fallback is visible.
+verification badges, Guest search, secure-and-fund Agent Mandate, quote
+presentation, automatic approval, Newcomer Host review, the explicit Host
+decision handoff, Host Agent review-before-publish, deposit confirmation, and
+HTS/HCS evidence links. Manual visual QA additionally covers the desktop and
+390px mobile layouts using the real local API with OpenAI disabled so
+deterministic fallback is visible.
 
 The Phase 5 API integration path uses controlled Hedera fakes with real
 PostgreSQL repositories to prove the full local flow through confirmed Booking,
@@ -158,6 +162,15 @@ financial or private-access claims in generated copy. API and browser-component
 tests cover both the Guest matching tracer and the Host review-before-publish
 tracer. These controlled tests do not count as a paid live OpenAI check.
 
+The Phase 9 suite proves bounded Agent-payment authorization and settlement. It
+covers one-use mandates bound to one Guest, Agent, Booking, quote, token,
+maximum deposit, and expiry; automatic settlement after stored policy approval;
+deferred settlement after explicit Host approval; atomic mandate consumption
+with Operation preparation; idempotent retry; and preservation of the manual
+deposit route. Browser tests prove the Agent path reaches confirmation without
+a second funding click. PostgreSQL cases require `TEST_DATABASE_URL` and do not
+count as live Testnet evidence.
+
 ## Required negative cases
 
 - stay shorter than 3 nights;
@@ -176,6 +189,9 @@ tracer. These controlled tests do not count as a paid live OpenAI check.
 - AI invents an unsupported amenity;
 - AI ranking references a Listing outside deterministic search results;
 - AI output attempts to add approval, deposit, token, or access authority;
+- Agent Payment Mandate is expired, consumed, mismatched, or below the stored
+  deposit;
+- retry attempts to reuse one mandate for a different financial Operation;
 - escrow submission timeout;
 - confirmed Hedera transaction after local timeout;
 - duplicate HCS event;
