@@ -1,15 +1,18 @@
 import { randomUUID } from 'node:crypto';
 
 import {
+  AgentPaymentMandateService,
   BookingDepositService,
   type FinancialLedgerPort,
   MarketplaceService,
   type RentalEvidencePort,
+  TokenAmount,
 } from '@nook-rent/core';
 import {
   applyMigrations,
   createPostgresClient,
   PostgresAvailabilityWindowRepository,
+  PostgresAgentPaymentMandateRepository,
   PostgresBookingQuoteRepository,
   PostgresBookingRepository,
   PostgresBookingRequestRepository,
@@ -33,26 +36,38 @@ describeWithDatabase('marketplace API tracer', () => {
   let sql: PostgresClient;
   let application: ReturnType<typeof createApi>;
   let ledger: FakeLedger;
+  let deposits: BookingDepositService;
+  let agentPaymentMandates: AgentPaymentMandateService;
+  let paymentMandateRepository: PostgresAgentPaymentMandateRepository;
 
   beforeAll(async () => {
     sql = createPostgresClient(databaseUrl ?? '', { maxConnections: 5 });
     await applyMigrations(sql);
     const bookings = new PostgresBookingRepository(sql);
+    const holds = new PostgresReservationHoldRepository(sql);
+    paymentMandateRepository = new PostgresAgentPaymentMandateRepository(sql);
     const marketplace = new MarketplaceService({
       profiles: new PostgresMemberProfileRepository(sql),
       listings: new PostgresListingRepository(sql),
       availability: new PostgresAvailabilityWindowRepository(sql),
       approvalPolicies: new PostgresListingApprovalPolicyRepository(sql),
       quotes: new PostgresBookingQuoteRepository(sql),
-      holds: new PostgresReservationHoldRepository(sql),
+      holds,
       bookingRequests: new PostgresBookingRequestRepository(sql),
       bookings,
       reputation: new PostgresRentalReputationRepository(sql),
       clock: { now: () => NOW },
       ids: { next: () => randomUUID() },
     });
+    agentPaymentMandates = new AgentPaymentMandateService({
+      bookings,
+      holds,
+      mandates: paymentMandateRepository,
+      clock: { now: () => NOW },
+      ids: { next: () => randomUUID() },
+    });
     ledger = new FakeLedger();
-    const deposits = new BookingDepositService({
+    deposits = new BookingDepositService({
       bookings,
       operations: new PostgresDepositOperationRepository(sql),
       ledger,
@@ -60,10 +75,12 @@ describeWithDatabase('marketplace API tracer', () => {
       clock: { now: () => NOW },
       ids: { next: () => randomUUID() },
       escrowRecipientRef: '0.0.2002',
+      paymentMandates: paymentMandateRepository,
     });
     application = createApi({
       marketplace,
       deposits,
+      agentPaymentMandates,
       hederaTopicId: '0.0.8001',
       humanBackedAuthorization: {
         createChallenge: () => ({ agentkit: { test: true } }),
@@ -98,11 +115,13 @@ describeWithDatabase('marketplace API tracer', () => {
   });
 
   beforeEach(async () => {
+    ledger.submissionCount = 0;
     await sql`
       truncate table
         nook.human_backed_authorizations,
         nook.reputation_projections,
         nook.rental_events,
+        nook.agent_payment_mandates,
         nook.payments,
         nook.escrows,
         nook.operations,
@@ -323,6 +342,62 @@ describeWithDatabase('marketplace API tracer', () => {
       status: 'awaiting_deposit',
       depositAmountAtomic: '75000',
     });
+  });
+
+  it('atomically consumes one Agent Payment Mandate with one Hedera deposit Operation', async () => {
+    const host = await createProfile('host', 'host-agent-payment');
+    const guest = await createProfile('guest', 'guest-agent-payment');
+    await setReputation(guest.id, 'silver', 3);
+    const listing = await createAndPublishListing(host.id);
+    const quoteResponse = await application.inject({
+      method: 'POST',
+      url: '/v1/booking-quotes',
+      payload: {
+        listingId: listing.id,
+        guestProfileId: guest.id,
+        checkIn: '2026-08-10',
+        checkOut: '2026-08-15',
+      },
+    });
+    const holdResponse = await application.inject({
+      method: 'POST',
+      url: '/v1/reservation-holds',
+      headers: {
+        'idempotency-key': 'agent-payment-hold-request',
+        agentkit: 'agent-payment-world-proof',
+      },
+      payload: {
+        quoteId: quoteResponse.json().id,
+      },
+    });
+    const bookingId = holdResponse.json().booking.id as string;
+    const authorization = await agentPaymentMandates.authorize({
+      idempotencyKey: 'payment:agent-payment-hold-request',
+      bookingId,
+      agentAddress: '0x1111111111111111111111111111111111111111',
+      maximumDeposit: TokenAmount.fromAtomicUnits('50000'),
+    });
+
+    const funded = await deposits.fundDeposit({
+      bookingId,
+      idempotencyKey: `agent-payment:${authorization.mandate.id}`,
+      agentPaymentMandateId: authorization.mandate.id,
+    });
+    const retry = await deposits.fundDeposit({
+      bookingId,
+      idempotencyKey: `agent-payment:${authorization.mandate.id}`,
+      agentPaymentMandateId: authorization.mandate.id,
+    });
+    const storedMandate = await paymentMandateRepository.getById(authorization.mandate.id);
+
+    expect(funded.snapshot.operation.status).toBe('confirmed');
+    expect(retry.idempotent).toBe(true);
+    expect(storedMandate).toMatchObject({
+      status: 'consumed',
+      bookingId,
+      operationId: funded.snapshot.operation.id,
+    });
+    expect(ledger.submissionCount).toBe(1);
   });
 
   async function createProfile(role: 'guest' | 'host', publicRef: string): Promise<{ id: string }> {

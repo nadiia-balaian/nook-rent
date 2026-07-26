@@ -85,7 +85,8 @@ to a Member profile.
 - searches and compares Listings;
 - reviews a Booking Quote;
 - requests a Reservation Hold;
-- funds the required Testnet escrow;
+- may authorize the Agent to fund the exact required Testnet escrow under a
+  one-use cap;
 - participates in checkout;
 - earns Rental Reputation from defined outcomes.
 
@@ -117,12 +118,14 @@ An AI-generated Listing never becomes public without Host confirmation.
 6. The Guest Agent ranks only valid results and explains the match.
 7. The Guest either reviews a Listing manually or authorizes a one-time Agent
    Mandate to select the top valid match, accept its deterministic Booking
-   Quote, and request one Reservation Hold.
+   Quote, request one Reservation Hold, and fund at most the displayed Testnet
+   deposit after approval.
 8. The Guest reviews public Host information, named Onchain Signals, Rental
    Reputation where available, and the Booking Quote.
 9. Nook.rent evaluates the Host's Approval Policy.
 10. The request is approved automatically or sent to Host review.
-11. The Guest funds escrow.
+11. The Agent automatically funds the exact stored deposit when its bounded
+    Agent Payment Mandate is usable; otherwise the Guest funds escrow manually.
 12. Nook.rent confirms the Booking only after the hold and financial operation
     are reconciled.
 
@@ -165,8 +168,9 @@ The integrations must be meaningful and end to end:
   Member verification;
 - an unverified Agent can browse public Listings;
 - an unverified Agent cannot reserve dates or initiate payment;
-- a verified human-backed Agent can execute one Guest-approved Agent Mandate
-  and request one valid hold;
+- a verified human-backed Agent can execute one Guest-approved Agent Mandate,
+  request one valid hold, and consume its bounded Agent Payment Mandate only
+  after deterministic approval;
 - replay and repeated-hold abuse are prevented per anonymous human.
 
 World proofs are processed server-side and are not published to HCS. Member
@@ -300,6 +304,8 @@ Allowed:
 - rank already-valid Listings;
 - explain approval outcomes;
 - prepare non-sensitive messages.
+- select a closed settlement intent after the Guest created a valid Agent
+  Payment Mandate.
 
 Forbidden:
 
@@ -313,8 +319,11 @@ Forbidden:
 
 The Guest Agent may select the highest-ranked Listing only after deterministic
 hard filtering. It may create the stored quote and request a hold under a
-one-time Agent Mandate. The Agent does not approve the request: the stored Host
-Approval Policy returns automatic approval or the Host review path.
+one-time Agent Mandate. If the Guest explicitly authorized a matching Agent
+Payment Mandate, the Agent may trigger settlement after approval, but the
+application loads the token, amount, recipient, and Booking from validated
+stored state. The Agent does not approve the request: the stored Host Approval
+Policy returns automatic approval or the Host review path.
 
 ## 17. MVP API surface
 
@@ -365,12 +374,14 @@ The demo succeeds when it shows:
 1. Host Agent creates a Listing draft and Host publishes it.
 2. Host and Guest complete direct World ID Member onboarding.
 3. Guest Agent finds a valid Listing for 3–90 nights.
-4. Guest authorizes one Agent Mandate and the Agent secures the top valid match.
+4. Guest authorizes one bounded Agent Mandate and Agent Payment Mandate; the
+   Agent secures and, after approval, funds the top valid match.
 5. An unverified Member or Agent is denied a hold.
 6. A human-backed Agent passes World authorization.
 7. The Graph supplies a live Agent registration signal.
 8. Experienced Guest receives automatic approval from stored Host policy.
 9. Newcomer receives fair Host review.
-10. A real Hedera Testnet deposit operation succeeds.
+10. The Agent triggers a real Hedera Testnet deposit operation without a second
+    payment click.
 11. Mirror Node confirms the transaction and HCS event.
 12. Conflicting dates cannot be booked twice.

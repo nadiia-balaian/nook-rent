@@ -2,6 +2,8 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto';
 
 import cors from '@fastify/cors';
 import {
+  type AgentPaymentMandate,
+  type AgentPaymentMandateService,
   AgentRegistrationError,
   type AgentRegistrationSignal,
   DomainConflictError,
@@ -53,6 +55,7 @@ export interface CreateApiOptions {
   marketplace?: MarketplaceApi;
   marketplaceAgents?: Pick<MarketplaceAgentService, 'createListingDraft' | 'search'>;
   deposits?: Pick<BookingDepositService, 'fundDeposit' | 'getDeposit' | 'reconcileDeposit'>;
+  agentPaymentMandates?: Pick<AgentPaymentMandateService, 'authorize' | 'getForBooking'>;
   hederaTopicId?: string;
   humanBackedAuthorization?: HumanBackedAuthorizationPort & {
     createChallenge(): object;
@@ -299,8 +302,37 @@ const guestAgentSecureMatchBody = z
   .object({
     guestProfileId: uuid.optional(),
     query: z.string().trim().min(3).max(1_000),
+    paymentMandate: z
+      .object({
+        authorized: z.literal(true),
+        maximumDepositAtomic: atomicUnits,
+      })
+      .strict(),
   })
   .strict();
+
+const protectedReservationResponse = z
+  .object({
+    booking: z
+      .object({
+        id: uuid,
+        status: z.enum([
+          'request_received',
+          'approval_pending',
+          'awaiting_deposit',
+          'confirmed',
+          'checked_in',
+          'checkout_pending',
+          'completed',
+          'rejected',
+          'expired',
+          'cancelled',
+          'disputed',
+        ]),
+      })
+      .passthrough(),
+  })
+  .passthrough();
 
 function errorEnvelope(request: FastifyRequest, code: string, message: string, details?: unknown) {
   return {
@@ -443,6 +475,20 @@ function requireDeposits(
   }
 
   return deposits;
+}
+
+function requireAgentPaymentMandates(
+  mandates: CreateApiOptions['agentPaymentMandates'],
+  request: FastifyRequest,
+): NonNullable<CreateApiOptions['agentPaymentMandates']> {
+  if (!mandates) {
+    throw new DomainConflictError(
+      'agent_payment_mandates_unavailable',
+      `Agent Payment Mandates are unavailable for request ${request.id}`,
+    );
+  }
+
+  return mandates;
 }
 
 function requireMarketplaceAgents(
@@ -694,6 +740,19 @@ function depositDto(result: DepositWorkflowResult, topicId?: string) {
           }
         : {}),
     },
+  };
+}
+
+function agentPaymentMandateDto(mandate: AgentPaymentMandate) {
+  return {
+    id: mandate.id,
+    bookingId: mandate.bookingId,
+    tokenId: mandate.tokenId,
+    maximumDepositAtomic: mandate.maximumDeposit.toString(),
+    status: mandate.status,
+    expiresAt: mandate.expiresAt,
+    operationId: mandate.operationId,
+    consumedAt: mandate.consumedAt,
   };
 }
 
@@ -1175,6 +1234,9 @@ export function createApi(options: CreateApiOptions = {}): FastifyInstance {
     }
 
     const marketplace = requireMarketplace(options.marketplace, request);
+    const deposits = requireDeposits(options.deposits, request);
+    const paymentMandates = requireAgentPaymentMandates(options.agentPaymentMandates, request);
+    const agent = requireWorldGuestAgent(options.worldGuestAgent, request);
     const searchResult = await requireMarketplaceAgents(options.marketplaceAgents, request).search({
       query: input.query,
     });
@@ -1211,18 +1273,44 @@ export function createApi(options: CreateApiOptions = {}): FastifyInstance {
         checkOut: searchResult.interpretation.checkOut,
       }),
     });
-    const agentResponse = await requireWorldGuestAgent(
-      options.worldGuestAgent,
-      request,
-    ).createReservationHold({
+    const agentResponse = await agent.createReservationHold({
       quoteId: quote.id,
       idempotencyKey,
     });
-    const reservation: unknown = await agentResponse.json();
+    const reservationBody: unknown = await agentResponse.json();
 
     if (!agentResponse.ok) {
-      return reply.header('cache-control', 'no-store').code(agentResponse.status).send(reservation);
+      return reply
+        .header('cache-control', 'no-store')
+        .code(agentResponse.status)
+        .send(reservationBody);
     }
+
+    let reservation = protectedReservationResponse.parse(reservationBody);
+    const mandateResult = await paymentMandates.authorize({
+      idempotencyKey: `payment:${idempotencyKey}`,
+      bookingId: reservation.booking.id,
+      agentAddress: agent.getAgentAddress(),
+      maximumDeposit: TokenAmount.fromAtomicUnits(input.paymentMandate.maximumDepositAtomic),
+    });
+    const storedBooking = await marketplace.getBooking(reservation.booking.id);
+    let deposit: DepositWorkflowResult | undefined;
+
+    if (storedBooking.status === 'awaiting_deposit' || storedBooking.status === 'confirmed') {
+      deposit = await deposits.fundDeposit({
+        bookingId: storedBooking.id,
+        idempotencyKey: `agent-payment:${mandateResult.mandate.id}`,
+        agentPaymentMandateId: mandateResult.mandate.id,
+      });
+      reservation = {
+        ...reservation,
+        booking: bookingDto(deposit.snapshot.booking),
+        hold: holdDto(deposit.snapshot.hold),
+      };
+    }
+
+    const storedMandate =
+      (await paymentMandates.getForBooking(storedBooking.id)) ?? mandateResult.mandate;
 
     return reply
       .header('cache-control', 'no-store')
@@ -1237,6 +1325,8 @@ export function createApi(options: CreateApiOptions = {}): FastifyInstance {
         },
         quote: quoteDto(quote),
         reservation,
+        paymentMandate: agentPaymentMandateDto(storedMandate),
+        ...(deposit ? { deposit: depositDto(deposit, options.hederaTopicId) } : {}),
         agent: {
           interpretation: searchResult.interpretationExecution,
           ranking: searchResult.rankingExecution,
@@ -1365,10 +1455,27 @@ export function createApi(options: CreateApiOptions = {}): FastifyInstance {
       decision: input.decision,
     });
 
+    const mandate =
+      input.decision === 'approved'
+        ? await options.agentPaymentMandates?.getForBooking(result.booking.id)
+        : undefined;
+    const deposit = mandate
+      ? await requireDeposits(options.deposits, request).fundDeposit({
+          bookingId: result.booking.id,
+          idempotencyKey: `agent-payment:${mandate.id}`,
+          agentPaymentMandateId: mandate.id,
+        })
+      : undefined;
+    const storedMandate = mandate
+      ? ((await options.agentPaymentMandates?.getForBooking(result.booking.id)) ?? mandate)
+      : undefined;
+
     return {
       bookingRequest: result.bookingRequest,
-      booking: bookingDto(result.booking),
-      hold: holdDto(result.hold),
+      booking: bookingDto(deposit?.snapshot.booking ?? result.booking),
+      hold: holdDto(deposit?.snapshot.hold ?? result.hold),
+      ...(storedMandate ? { paymentMandate: agentPaymentMandateDto(storedMandate) } : {}),
+      ...(deposit ? { deposit: depositDto(deposit, options.hederaTopicId) } : {}),
     };
   });
 

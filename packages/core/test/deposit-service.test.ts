@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  type AgentPaymentMandate,
+  type AgentPaymentMandateRepositoryPort,
   BookingDepositService,
   type Booking,
   type DepositOperationRepositoryPort,
@@ -55,8 +57,10 @@ function hold(): ReservationHold {
 
 class MemoryDepositOperations implements DepositOperationRepositoryPort {
   snapshot?: DepositOperationSnapshot;
+  preparedAgentPaymentMandateId: string | undefined;
 
   prepare(input: PrepareDepositOperationInput): Promise<DepositOperationSnapshot> {
+    this.preparedAgentPaymentMandateId = input.agentPaymentMandateId;
     if (this.snapshot) {
       return Promise.resolve(this.snapshot);
     }
@@ -191,6 +195,25 @@ class MemoryDepositOperations implements DepositOperationRepositoryPort {
   }
 }
 
+class MemoryPaymentMandates implements AgentPaymentMandateRepositoryPort {
+  constructor(private readonly mandate: AgentPaymentMandate) {}
+
+  authorize(): Promise<{
+    status: 'idempotent';
+    mandate: AgentPaymentMandate;
+  }> {
+    return Promise.resolve({ status: 'idempotent', mandate: this.mandate });
+  }
+
+  getById(id: string): Promise<AgentPaymentMandate | undefined> {
+    return Promise.resolve(id === this.mandate.id ? this.mandate : undefined);
+  }
+
+  getByBookingId(bookingId: string): Promise<AgentPaymentMandate | undefined> {
+    return Promise.resolve(bookingId === this.mandate.bookingId ? this.mandate : undefined);
+  }
+}
+
 class FakeLedger implements FinancialLedgerPort {
   submissionCount = 0;
   transactionStatus: Awaited<ReturnType<FinancialLedgerPort['getTransactionStatus']>> = 'confirmed';
@@ -231,7 +254,11 @@ class FakeEvidence implements RentalEvidencePort {
   }
 }
 
-function service(input?: { ledger?: FakeLedger; operations?: MemoryDepositOperations }) {
+function service(input?: {
+  ledger?: FakeLedger;
+  mandate?: AgentPaymentMandate;
+  operations?: MemoryDepositOperations;
+}) {
   const operations = input?.operations ?? new MemoryDepositOperations();
   const ledger = input?.ledger ?? new FakeLedger();
   const evidence = new FakeEvidence();
@@ -248,12 +275,71 @@ function service(input?: { ledger?: FakeLedger; operations?: MemoryDepositOperat
     clock: { now: () => now },
     ids: { next: (prefix) => `${prefix}-${(id += 1)}` },
     escrowRecipientRef: '0.0.2002',
+    ...(input?.mandate ? { paymentMandates: new MemoryPaymentMandates(input.mandate) } : {}),
   });
 
   return { instance, operations, ledger, evidence };
 }
 
 describe('BookingDepositService', () => {
+  it('accepts a matching one-use Agent Payment Mandate without exposing transfer terms', async () => {
+    const tracer = service({
+      mandate: {
+        id: 'mandate-1',
+        idempotencyKey: 'payment:secure-match-1',
+        guestProfileId: 'guest-1',
+        agentAddress: '0xabc',
+        bookingId: 'booking-1',
+        quoteId: 'quote-1',
+        tokenId: '0.0.7001',
+        maximumDeposit: TokenAmount.fromAtomicUnits('25000'),
+        status: 'active',
+        expiresAt: '2026-07-25T12:15:00.000Z',
+        createdAt: now,
+        updatedAt: now,
+      },
+    });
+
+    const result = await tracer.instance.fundDeposit({
+      bookingId: 'booking-1',
+      idempotencyKey: 'agent-payment:mandate-1',
+      agentPaymentMandateId: 'mandate-1',
+    });
+
+    expect(result.snapshot.operation.status).toBe('confirmed');
+    expect(tracer.operations.preparedAgentPaymentMandateId).toBe('mandate-1');
+  });
+
+  it('rejects an expired Agent Payment Mandate before reserving a transaction', async () => {
+    const tracer = service({
+      mandate: {
+        id: 'mandate-expired',
+        idempotencyKey: 'payment:secure-match-expired',
+        guestProfileId: 'guest-1',
+        agentAddress: '0xabc',
+        bookingId: 'booking-1',
+        quoteId: 'quote-1',
+        tokenId: '0.0.7001',
+        maximumDeposit: TokenAmount.fromAtomicUnits('25000'),
+        status: 'active',
+        expiresAt: now,
+        createdAt: '2026-07-25T11:00:00.000Z',
+        updatedAt: now,
+      },
+    });
+
+    await expect(
+      tracer.instance.fundDeposit({
+        bookingId: 'booking-1',
+        idempotencyKey: 'agent-payment:mandate-expired',
+        agentPaymentMandateId: 'mandate-expired',
+      }),
+    ).rejects.toMatchObject({
+      conflict: 'agent_payment_mandate_expired',
+    });
+    expect(tracer.ledger.submissionCount).toBe(0);
+  });
+
   it('confirms a stored deposit through Mirror status and publishes HCS evidence', async () => {
     const tracer = service();
 

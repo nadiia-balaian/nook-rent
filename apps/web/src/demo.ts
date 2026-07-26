@@ -36,6 +36,8 @@ export const DEFAULT_SEARCH = {
 export const DEFAULT_GUEST_QUERY =
   'Find me a stay in Lisbon from 2026-08-20 to 2026-08-25 for 1 guest under 15000 with wifi.';
 
+export const AGENT_PAYMENT_CAP_ATOMIC = '75000';
+
 export const BOOKING_STEPS = [
   { status: 'request_received', label: 'Request received' },
   { status: 'approval_pending', label: 'Host review' },

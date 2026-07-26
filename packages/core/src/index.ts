@@ -1,4 +1,5 @@
 export * from './approval-policy.js';
+export * from './agent-payment-mandate-service.js';
 export * from './booking-quote.js';
 export * from './deposit-service.js';
 export * from './entities.js';

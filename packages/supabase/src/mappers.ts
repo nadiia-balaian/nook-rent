@@ -1,4 +1,6 @@
 import {
+  type AgentPaymentMandate,
+  type AgentPaymentMandateStatus,
   type AvailabilityWindow,
   type Booking,
   type BookingQuote,
@@ -164,6 +166,23 @@ export interface PaymentRow {
   updated_at: DatabaseTimestamp;
 }
 
+export interface AgentPaymentMandateRow {
+  id: string;
+  idempotency_key: string;
+  guest_profile_id: string;
+  agent_address: string;
+  booking_id: string;
+  quote_id: string;
+  token_id: string;
+  maximum_deposit_atomic: string;
+  status: string;
+  expires_at: DatabaseTimestamp;
+  operation_id: string | null;
+  consumed_at: DatabaseTimestamp | null;
+  created_at: DatabaseTimestamp;
+  updated_at: DatabaseTimestamp;
+}
+
 function toIsoTimestamp(value: DatabaseTimestamp): string {
   return value instanceof Date ? value.toISOString() : new Date(value).toISOString();
 }
@@ -301,6 +320,18 @@ function paymentStatus(value: string): PaymentStatus {
       return value;
     default:
       throw new Error(`Unsupported Payment status from database: ${value}`);
+  }
+}
+
+function agentPaymentMandateStatus(value: string): AgentPaymentMandateStatus {
+  switch (value) {
+    case 'active':
+    case 'consumed':
+    case 'expired':
+    case 'cancelled':
+      return value;
+    default:
+      throw new Error(`Unsupported Agent Payment Mandate status from database: ${value}`);
   }
 }
 
@@ -515,6 +546,28 @@ export function mapPaymentRow(row: PaymentRow): Payment {
     recipientRef: row.recipient_ref,
     status: paymentStatus(row.status),
     operationId: row.operation_id,
+    createdAt: toIsoTimestamp(row.created_at),
+    updatedAt: toIsoTimestamp(row.updated_at),
+  };
+}
+
+export function mapAgentPaymentMandateRow(row: AgentPaymentMandateRow): AgentPaymentMandate {
+  const operationId = row.operation_id ?? undefined;
+  const consumedAt = row.consumed_at ? toIsoTimestamp(row.consumed_at) : undefined;
+
+  return {
+    id: row.id,
+    idempotencyKey: row.idempotency_key,
+    guestProfileId: row.guest_profile_id,
+    agentAddress: row.agent_address,
+    bookingId: row.booking_id,
+    quoteId: row.quote_id,
+    tokenId: row.token_id,
+    maximumDeposit: TokenAmount.fromAtomicUnits(row.maximum_deposit_atomic),
+    status: agentPaymentMandateStatus(row.status),
+    expiresAt: toIsoTimestamp(row.expires_at),
+    ...(operationId ? { operationId } : {}),
+    ...(consumedAt ? { consumedAt } : {}),
     createdAt: toIsoTimestamp(row.created_at),
     updatedAt: toIsoTimestamp(row.updated_at),
   };

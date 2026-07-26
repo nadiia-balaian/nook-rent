@@ -1,6 +1,7 @@
 import type { Booking, ExternalOperation } from './entities.js';
 import { DomainConflictError, DomainValidationError, ResourceNotFoundError } from './errors.js';
 import type {
+  AgentPaymentMandateRepositoryPort,
   BookingRepositoryPort,
   ClockPort,
   DepositOperationRepositoryPort,
@@ -9,6 +10,7 @@ import type {
   IdGeneratorPort,
   RentalEvidencePort,
 } from './ports.js';
+import { requireUsableAgentPaymentMandate } from './agent-payment-mandate-service.js';
 
 const RETRY_DELAY_MILLISECONDS = 5_000;
 
@@ -35,6 +37,7 @@ export interface BookingDepositServiceDependencies {
   clock: ClockPort;
   ids: IdGeneratorPort;
   escrowRecipientRef: string;
+  paymentMandates?: AgentPaymentMandateRepositoryPort;
 }
 
 function requireIdempotencyKey(value: string): string {
@@ -95,6 +98,7 @@ export class BookingDepositService {
   async fundDeposit(input: {
     bookingId: string;
     idempotencyKey: string;
+    agentPaymentMandateId?: string;
   }): Promise<DepositWorkflowResult> {
     const idempotencyKey = requireIdempotencyKey(input.idempotencyKey);
     const booking = await this.dependencies.bookings.getById(input.bookingId);
@@ -105,6 +109,29 @@ export class BookingDepositService {
 
     this.requireFundableBooking(booking);
 
+    if (input.agentPaymentMandateId) {
+      const mandates = this.dependencies.paymentMandates;
+
+      if (!mandates) {
+        throw new DomainConflictError(
+          'agent_payment_mandates_unavailable',
+          'Agent Payment Mandates are not configured',
+        );
+      }
+
+      const mandate = await mandates.getById(input.agentPaymentMandateId);
+
+      if (!mandate) {
+        throw new ResourceNotFoundError('Agent Payment Mandate', input.agentPaymentMandateId);
+      }
+
+      requireUsableAgentPaymentMandate({
+        mandate,
+        booking,
+        now: this.dependencies.clock.now(),
+      });
+    }
+
     const operationId = this.dependencies.ids.next('operation');
     const snapshot = await this.dependencies.operations.prepare({
       operationId,
@@ -114,6 +141,9 @@ export class BookingDepositService {
       booking,
       escrowRecipientRef: this.escrowRecipientRef,
       publicEvidenceRef: this.dependencies.ids.next('evidence'),
+      ...(input.agentPaymentMandateId
+        ? { agentPaymentMandateId: input.agentPaymentMandateId }
+        : {}),
       now: this.dependencies.clock.now(),
     });
 

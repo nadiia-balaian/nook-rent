@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -199,6 +199,23 @@ function confirmedDeposit(initialReservation: ReservationResult): DepositResult 
       topicUrl: 'https://hashscan.io/testnet/topic/0.0.8001',
     },
   };
+}
+
+function paymentMandate(initialReservation: ReservationResult, status: 'active' | 'consumed') {
+  return {
+    id: '80000000-0000-4000-8000-000000000001',
+    bookingId: initialReservation.booking.id,
+    tokenId: initialReservation.booking.settlementTokenId,
+    maximumDepositAtomic: '75000',
+    status,
+    expiresAt: initialReservation.hold.expiresAt,
+    ...(status === 'consumed'
+      ? {
+          operationId: '80000000-0000-4000-8000-000000000001',
+          consumedAt: '2026-07-25T10:00:00.000Z',
+        }
+      : {}),
+  } as const;
 }
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -508,6 +525,32 @@ function installMarketplaceApi(
         );
       }
       if (url.pathname === '/v1/agents/guest/secure-match') {
+        if (typeof init?.body !== 'string') {
+          throw new Error('Expected JSON request body for secure match');
+        }
+        const body = JSON.parse(init.body) as {
+          paymentMandate: {
+            authorized: boolean;
+            maximumDepositAtomic: string;
+          };
+        };
+        if (
+          !body.paymentMandate.authorized ||
+          body.paymentMandate.maximumDepositAtomic !== '75000'
+        ) {
+          throw new Error('Expected the bounded Agent Payment Mandate');
+        }
+
+        const fundedDeposit =
+          mode === 'automatic' ? confirmedDeposit(initialReservation) : undefined;
+        const securedReservation = fundedDeposit
+          ? {
+              ...initialReservation,
+              booking: fundedDeposit.booking,
+              hold: fundedDeposit.hold,
+            }
+          : initialReservation;
+
         return Promise.resolve(
           jsonResponse(
             {
@@ -531,7 +574,12 @@ function installMarketplaceApi(
                 guestProfileId: initialReservation.booking.guestProfileId,
                 reputationTier: mode === 'manual' ? 'newcomer' : 'silver',
               },
-              reservation: initialReservation,
+              reservation: securedReservation,
+              paymentMandate: paymentMandate(
+                initialReservation,
+                mode === 'automatic' ? 'consumed' : 'active',
+              ),
+              ...(fundedDeposit ? { deposit: fundedDeposit } : {}),
               agent: {
                 interpretation: {
                   provider: 'openai',
@@ -556,6 +604,7 @@ function installMarketplaceApi(
         return Promise.resolve(jsonResponse(confirmedDeposit(initialReservation)));
       }
       if (url.pathname.endsWith('/decision')) {
+        const fundedDeposit = confirmedDeposit(initialReservation);
         return Promise.resolve(
           jsonResponse({
             bookingRequest: {
@@ -563,11 +612,10 @@ function installMarketplaceApi(
               approvalResult: 'approved',
               status: 'approved',
             },
-            booking: {
-              ...initialReservation.booking,
-              status: 'awaiting_deposit',
-            },
-            hold: initialReservation.hold,
+            booking: fundedDeposit.booking,
+            hold: fundedDeposit.hold,
+            paymentMandate: paymentMandate(initialReservation, 'consumed'),
+            deposit: fundedDeposit,
           }),
         );
       }
@@ -714,21 +762,14 @@ describe('Nook marketplace demo', () => {
     expect(await screen.findByText(listing.title)).toBeTruthy();
     expect(screen.getByText('The best valid work-friendly match.')).toBeTruthy();
 
-    await user.click(screen.getByRole('button', { name: 'Secure best match' }));
-    expect(
-      await screen.findByRole('heading', { name: 'Approved—your deposit is next.' }),
-    ).toBeTruthy();
-    expect(screen.getByText('Human-backed this hold')).toBeTruthy();
-    expect(screen.getByText('base-sepolia · capability active')).toBeTruthy();
-
-    await user.click(screen.getByRole('button', { name: 'Fund Testnet deposit' }));
+    await user.click(screen.getByRole('button', { name: 'Secure and fund best match' }));
     expect(await screen.findByRole('heading', { name: 'You found your nook.' })).toBeTruthy();
     expect(screen.getByText('HCS sequence #14')).toBeTruthy();
     expect(screen.getByRole('link', { name: /HTS transaction/ })).toBeTruthy();
     expect(screen.getByRole('link', { name: /HCS record/ })).toBeTruthy();
   });
 
-  it('hands a Newcomer request to the Host for an explicit decision', async () => {
+  it('waits for Host review, then autonomously funds the approved Newcomer request', async () => {
     installMarketplaceApi('manual');
     const user = userEvent.setup();
 
@@ -739,8 +780,7 @@ describe('Nook marketplace demo', () => {
     expect(await screen.findByRole('heading', { name: 'Where to?' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Verify with World ID' })).toBeNull();
     await user.click(screen.getByRole('button', { name: 'Find available nooks' }));
-    await user.click(await screen.findByRole('button', { name: 'View nook' }));
-    await user.click(await screen.findByRole('button', { name: 'Request this nook' }));
+    await user.click(await screen.findByRole('button', { name: 'Secure and fund best match' }));
 
     expect(
       await screen.findByRole('heading', { name: 'Your Host will review this.' }),
@@ -749,9 +789,8 @@ describe('Nook marketplace demo', () => {
     expect(screen.getByRole('heading', { name: 'Jo would like to stay.' })).toBeTruthy();
 
     await user.click(screen.getByRole('button', { name: 'Approve request' }));
-    await waitFor(() => {
-      expect(screen.getByText('Request approved')).toBeTruthy();
-    });
+    expect(await screen.findByRole('heading', { name: 'You found your nook.' })).toBeTruthy();
+    expect(screen.getByText('HCS sequence #14')).toBeTruthy();
   });
 
   it('explains when the protected hold needs a World-verified Guest Agent', async () => {

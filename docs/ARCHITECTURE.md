@@ -1,7 +1,7 @@
 # Nook.rent architecture
 
-Status: Phase 8 constrained marketplace Agents and guided demo UI implemented;
-live OpenAI smoke evidence pending
+Status: Phase 9 bounded Agent payments implemented locally; hosted migration,
+live Agent-payment evidence, and live OpenAI smoke evidence pending
 
 ## Principles
 
@@ -69,6 +69,8 @@ connection, Listing creation, Agent review, search, Listing detail, Booking
 Quote, Reservation Hold, Host review, deposit, and confirmation states. It
 communicates with IDKit for the World App proof flow and otherwise only with the
 API.
+The Guest may submit one explicit secure-and-fund authorization containing a
+maximum Testnet deposit. The browser never receives Hedera signing authority.
 The UI includes clearly labeled seeded Rental Reputation profiles while the
 real HCS projection is deferred; it never presents that demo data as live
 sponsor evidence. It does not hold provider credentials or make financial or
@@ -85,7 +87,10 @@ returns public read models. It is a composition root for provider adapters. For
 the guided demo it also exposes a narrow bridge to the server-side Guest Agent.
 The browser may approve one bounded Agent Mandate to select the top
 database-valid match, accept its deterministic quote, and request a protected
-hold without receiving Agent signing material.
+hold. It may attach a one-use Agent Payment Mandate capped by the Guest and
+bound server-side to the resulting Booking, quote, token, and Agent. After
+automatic or Host approval, the API invokes the same deposit service as the
+manual route without receiving Agent signing material.
 Listing search excludes overlapping live Reservation Holds and confirmed
 occupancy before any Agent ranking. Expiring a Hold also expires its still
 pending Booking so an abandoned attempt cannot reserve dates forever.
@@ -123,6 +128,11 @@ Bookings do not overlap.
 ### Booking
 
 Owns the approved terms and lifecycle for one stay.
+
+### Agent Payment Mandate
+
+Owns one-use Guest authorization to settle a single Booking deposit under an
+exact quote, token, maximum amount, Agent binding, and expiry.
 
 ### Reputation
 
@@ -169,7 +179,8 @@ sequenceDiagram
   T-->>A: Wallet, operator, capabilities
   A->>D: Atomically create expiring hold
   D-->>A: Hold and accepted quote
-  A->>D: Persist pending financial Operation
+  A->>D: Persist bounded payment mandate
+  A->>D: Consume mandate and persist financial Operation
   A->>H: Submit reserved deposit transaction
   H-->>A: Submission reference
   A->>M: Reconcile consensus result
@@ -189,7 +200,8 @@ The required pattern is:
 1. validate stored Listing, quote, availability, and Approval Policy;
 2. verify World and The Graph prerequisites;
 3. atomically create an expiring Reservation Hold;
-4. create a pending Operation with a stable idempotency key;
+4. validate and atomically consume any Agent Payment Mandate while creating a
+   pending Operation with a stable idempotency key;
 5. reserve the provider transaction identity;
 6. submit the financial write;
 7. reconcile through Mirror Node;
@@ -229,15 +241,20 @@ language request. The API interprets it into validated constraints, reruns hard
 database filtering, and lets the Agent select only the first ranked valid
 candidate. Stored Listing data and the interpreted date range create the
 deterministic Booking Quote. The server-side Guest Agent then requests one
-idempotent protected hold. Stored Host policy—not the Agent—returns automatic
-approval or Host review.
+idempotent protected hold and stores a Guest-approved maximum Testnet deposit.
+This creates an Agent Payment Mandate bound to the selected Booking, quote,
+token, Agent, and expiry. Stored Host policy—not the Agent—returns automatic
+approval or Host review. Once approved, the application may consume the
+mandate to settle only the exact stored deposit.
 
 ### Commands
 
-The Agent selects from a closed intent vocabulary. Application services load all
-financial and authorization parameters from stored state. No AI provider
-receives World proofs, signing material, exact property access data, or
-financial authority.
+The Agent selects from a closed intent vocabulary, including the narrow
+`settle_approved_booking` action. Application services load all financial and
+authorization parameters from stored state; the action carries references, not
+an Agent-selected amount, token, or recipient. No AI provider receives World
+proofs, signing material, exact property access data, or unrestricted financial
+authority.
 
 ## World architecture
 
@@ -316,6 +333,11 @@ and reserves a stable Hedera transaction ID before submission. A submission
 timeout moves the Operation to `reconciling`; it does not trigger a second
 transfer. Mirror Node decides whether the transfer confirmed or failed.
 
+For an Agent-triggered deposit, Operation preparation atomically consumes an
+active Agent Payment Mandate. The repository verifies its Booking, quote,
+token, cap, Agent, status, and expiry. A retry may reuse only the same mandate
+and Operation, so the Agent cannot spend it twice.
+
 On confirmation, one database transaction funds the Escrow, confirms the
 Payment and Booking, and converts the Reservation Hold. HCS publication is a
 separate retriable evidence step. Its payload contains only a pseudonymous
@@ -339,9 +361,11 @@ model, not a production custody design.
 - Nook.rent tables must not depend on unrelated application tables.
 
 The schema and repositories are implemented and tested against local
-PostgreSQL. Migration `202607260012_member_sessions.sql` adds private,
-server-only Member Sessions with hashed tokens and optional verified Member
-bindings. Applying it to hosted Supabase remains an explicit deployment step.
+PostgreSQL. The isolated hosted `nook` schema currently includes migrations
+through `202607260011_expire_pending_booking_with_hold.sql`. The two subsequent
+local migrations add private, server-only Member Sessions and bounded Agent
+Payment Mandates. Applying them to hosted Supabase remains an explicit
+deployment step.
 
 ## Deployment shape
 

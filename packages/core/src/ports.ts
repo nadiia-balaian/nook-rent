@@ -1,5 +1,6 @@
 import type { ApprovalPolicy } from './approval-policy.js';
 import type {
+  AgentPaymentMandate,
   AvailabilityWindow,
   Booking,
   BookingQuote,
@@ -97,6 +98,14 @@ export interface BookingRequestRepositoryPort {
   getByHoldId(holdId: string): Promise<BookingRequest | undefined>;
   getById(id: string): Promise<BookingRequest | undefined>;
   save(request: BookingRequest): Promise<void>;
+}
+
+export interface AgentPaymentMandateRepositoryPort {
+  authorize(
+    mandate: AgentPaymentMandate,
+  ): Promise<{ status: 'created' | 'idempotent'; mandate: AgentPaymentMandate }>;
+  getById(id: string): Promise<AgentPaymentMandate | undefined>;
+  getByBookingId(bookingId: string): Promise<AgentPaymentMandate | undefined>;
 }
 
 export interface HumanBackedAuthorization {
@@ -240,6 +249,7 @@ export interface PrepareDepositOperationInput {
   booking: Booking;
   escrowRecipientRef: string;
   publicEvidenceRef: string;
+  agentPaymentMandateId?: string;
   now: string;
 }
 

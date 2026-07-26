@@ -1,5 +1,8 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import {
+  type AgentPaymentMandate,
+  type Booking,
+  type DepositWorkflowResult,
   HumanBackedAuthorizationError,
   OnchainSignalProviderError,
   StayRange,
@@ -923,7 +926,7 @@ describe('Nook API', () => {
     });
   });
 
-  it('lets a verified Guest Agent select the best valid match and secure its dates', async () => {
+  it('lets a verified Guest Agent secure a match and autonomously fund its deposit', async () => {
     const listing = {
       id: '30000000-0000-4000-8000-000000000001',
       hostProfileId,
@@ -960,7 +963,111 @@ describe('Nook API', () => {
       expiresAt: '2026-07-25T10:15:00.000Z',
       createdAt: '2026-07-25T10:00:00.000Z',
     };
+    const booking: Booking = {
+      id: '70000000-0000-4000-8000-000000000001',
+      listingId: listing.id,
+      hostProfileId,
+      guestProfileId: quote.guestProfileId,
+      quoteId: quote.id,
+      holdId: '50000000-0000-4000-8000-000000000001',
+      stayRange: quote.stayRange,
+      settlementTokenId: quote.settlementTokenId,
+      staySubtotal: quote.staySubtotal,
+      depositAmount: quote.quotedDeposit,
+      status: 'awaiting_deposit',
+      createdAt: quote.createdAt,
+      updatedAt: quote.createdAt,
+    };
+    const hold = {
+      id: booking.holdId,
+      listingId: listing.id,
+      guestProfileId: quote.guestProfileId,
+      quoteId: quote.id,
+      stayRange: quote.stayRange,
+      status: 'active' as const,
+      expiresAt: quote.expiresAt,
+      createdAt: quote.createdAt,
+      updatedAt: quote.createdAt,
+    };
+    let storedMandate: AgentPaymentMandate = {
+      id: '80000000-0000-4000-8000-000000000001',
+      idempotencyKey: 'payment:agent-secure-best-match',
+      guestProfileId: booking.guestProfileId,
+      agentAddress: '0x1111111111111111111111111111111111111111',
+      bookingId: booking.id,
+      quoteId: booking.quoteId,
+      tokenId: booking.settlementTokenId,
+      maximumDeposit: TokenAmount.fromAtomicUnits('75000'),
+      status: 'active',
+      expiresAt: hold.expiresAt,
+      createdAt: quote.createdAt,
+      updatedAt: quote.createdAt,
+    };
     let receivedHold: { quoteId: string; idempotencyKey: string } | undefined;
+    let receivedDeposit:
+      | {
+          bookingId: string;
+          idempotencyKey: string;
+          agentPaymentMandateId?: string;
+        }
+      | undefined;
+    const depositResult = (): DepositWorkflowResult => ({
+      snapshot: {
+        operation: {
+          id: '90000000-0000-4000-8000-000000000001',
+          kind: 'hedera_deposit',
+          idempotencyKey: `agent-payment:${storedMandate.id}`,
+          aggregateType: 'booking',
+          aggregateId: booking.id,
+          provider: 'hedera',
+          providerTransactionId: '0.0.1001@1784980800.000000001',
+          status: 'confirmed',
+          requestPayload: {
+            bookingId: booking.id,
+            agentPaymentMandateId: storedMandate.id,
+          },
+          attemptCount: 1,
+          createdAt: quote.createdAt,
+          updatedAt: quote.createdAt,
+        },
+        booking: {
+          ...booking,
+          status: 'confirmed',
+        },
+        hold: {
+          ...hold,
+          status: 'converted',
+        },
+        escrow: {
+          id: '91000000-0000-4000-8000-000000000001',
+          bookingId: booking.id,
+          tokenId: booking.settlementTokenId,
+          amount: booking.depositAmount,
+          status: 'funded',
+          fundedTransactionId: '0.0.1001@1784980800.000000001',
+          createdAt: quote.createdAt,
+          updatedAt: quote.createdAt,
+        },
+        payment: {
+          id: '92000000-0000-4000-8000-000000000001',
+          bookingId: booking.id,
+          kind: 'deposit',
+          tokenId: booking.settlementTokenId,
+          amount: booking.depositAmount,
+          recipientRef: '0.0.2002',
+          status: 'confirmed',
+          operationId: '90000000-0000-4000-8000-000000000001',
+          createdAt: quote.createdAt,
+          updatedAt: quote.createdAt,
+        },
+      },
+      evidence: {
+        status: 'confirmed',
+        transactionId: '0.0.1001@1784980801.000000001',
+        sequenceNumber: 14,
+      },
+      idempotent: false,
+    });
     const application = createApi({
       memberWorldId: verifiedMemberWorldId(),
       worldIdVerifications: {
@@ -969,6 +1076,7 @@ describe('Nook API', () => {
       },
       marketplace: {
         createQuote: () => Promise.resolve(quote),
+        getBooking: () => Promise.resolve(booking),
       } as never,
       marketplaceAgents: {
         createListingDraft: () => Promise.reject(new Error('unused')),
@@ -1015,6 +1123,14 @@ describe('Nook API', () => {
                 status: 'created',
                 approval: { status: 'auto_approved' },
                 authorization: { provider: 'world_agentkit', humanBacked: true },
+                booking: {
+                  id: booking.id,
+                  status: booking.status,
+                },
+                hold: {
+                  id: hold.id,
+                  status: hold.status,
+                },
               }),
               {
                 status: 201,
@@ -1024,6 +1140,32 @@ describe('Nook API', () => {
           );
         },
       },
+      agentPaymentMandates: {
+        authorize: (input) => {
+          expect(input).toMatchObject({
+            idempotencyKey: 'payment:agent-secure-best-match',
+            bookingId: booking.id,
+            maximumDeposit: TokenAmount.fromAtomicUnits('75000'),
+          });
+          return Promise.resolve({ status: 'created', mandate: storedMandate });
+        },
+        getForBooking: () => Promise.resolve(storedMandate),
+      },
+      deposits: {
+        fundDeposit: (input) => {
+          receivedDeposit = input;
+          storedMandate = {
+            ...storedMandate,
+            status: 'consumed',
+            operationId: '90000000-0000-4000-8000-000000000001',
+            consumedAt: quote.createdAt,
+          };
+          return Promise.resolve(depositResult());
+        },
+        getDeposit: () => Promise.reject(new Error('unused')),
+        reconcileDeposit: () => Promise.reject(new Error('unused')),
+      },
+      hederaTopicId: '0.0.8001',
     });
     applications.push(application);
 
@@ -1037,6 +1179,10 @@ describe('Nook API', () => {
         guestProfileId: quote.guestProfileId,
         query:
           'Find a stay in Lisbon from 2026-08-20 to 2026-08-25 for 1 guest under 15000 with wifi.',
+        paymentMandate: {
+          authorized: true,
+          maximumDepositAtomic: '75000',
+        },
       },
     });
 
@@ -1044,6 +1190,11 @@ describe('Nook API', () => {
     expect(receivedHold).toEqual({
       quoteId: quote.id,
       idempotencyKey: 'agent-secure-best-match',
+    });
+    expect(receivedDeposit).toEqual({
+      bookingId: booking.id,
+      idempotencyKey: `agent-payment:${storedMandate.id}`,
+      agentPaymentMandateId: storedMandate.id,
     });
     expect(response.json()).toMatchObject({
       status: 'secured',
@@ -1063,11 +1214,32 @@ describe('Nook API', () => {
       },
       reservation: {
         status: 'created',
+        booking: {
+          status: 'confirmed',
+        },
+        hold: {
+          status: 'converted',
+        },
         approval: {
           status: 'auto_approved',
         },
       },
+      paymentMandate: {
+        id: storedMandate.id,
+        maximumDepositAtomic: '75000',
+        status: 'consumed',
+      },
+      deposit: {
+        operation: {
+          status: 'confirmed',
+        },
+        evidence: {
+          status: 'confirmed',
+          sequenceNumber: 14,
+        },
+      },
     });
+    expect(JSON.stringify(response.json())).not.toContain(storedMandate.agentAddress);
   });
 
   it('routes the browser request through the World-backed Guest Agent', async () => {

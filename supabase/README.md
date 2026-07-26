@@ -23,8 +23,9 @@ authorization, nonce replay defense, and a one-active-hold limit. All migrations
 pass the repository and marketplace API integration suites against local
 PostgreSQL.
 
-The first three migrations are applied to hosted Supabase. The fourth migration
-is locally verified and remains an explicit hosted write.
+Migrations through `202607260011_expire_pending_booking_with_hold.sql` are
+applied to hosted Supabase. The Member Session and Agent Payment Mandate
+migrations are locally implemented and remain explicit hosted writes.
 
 To apply the migration to an explicitly selected database:
 

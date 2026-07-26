@@ -1,5 +1,7 @@
 import { DomainConflictError } from '@nook-rent/core';
 import type {
+  AgentPaymentMandate,
+  AgentPaymentMandateRepositoryPort,
   AvailabilityWindow,
   AvailabilityWindowRepositoryPort,
   Booking,
@@ -29,6 +31,7 @@ import type {
 
 import type { PostgresClient } from './client.js';
 import {
+  type AgentPaymentMandateRow,
   type AvailabilityWindowRow,
   type BookingRow,
   type BookingQuoteRow,
@@ -37,6 +40,7 @@ import {
   type ExternalOperationRow,
   type ListingRow,
   mapAvailabilityWindowRow,
+  mapAgentPaymentMandateRow,
   mapBookingRow,
   mapBookingQuoteRow,
   mapBookingRequestRow,
@@ -882,6 +886,106 @@ export class PostgresBookingRequestRepository implements BookingRequestRepositor
   }
 }
 
+function sameAgentPaymentMandate(left: AgentPaymentMandate, right: AgentPaymentMandate): boolean {
+  return (
+    left.idempotencyKey === right.idempotencyKey &&
+    left.guestProfileId === right.guestProfileId &&
+    left.agentAddress === right.agentAddress &&
+    left.bookingId === right.bookingId &&
+    left.quoteId === right.quoteId &&
+    left.tokenId === right.tokenId &&
+    left.maximumDeposit.equals(right.maximumDeposit) &&
+    left.expiresAt === right.expiresAt
+  );
+}
+
+export class PostgresAgentPaymentMandateRepository implements AgentPaymentMandateRepositoryPort {
+  constructor(private readonly sql: PostgresClient) {}
+
+  async authorize(
+    mandate: AgentPaymentMandate,
+  ): Promise<{ status: 'created' | 'idempotent'; mandate: AgentPaymentMandate }> {
+    const rows = await this.sql<{ id: string }[]>`
+      insert into nook.agent_payment_mandates (
+        id,
+        idempotency_key,
+        guest_profile_id,
+        agent_address,
+        booking_id,
+        quote_id,
+        token_id,
+        maximum_deposit_atomic,
+        status,
+        expires_at,
+        created_at,
+        updated_at
+      )
+      values (
+        ${mandate.id},
+        ${mandate.idempotencyKey},
+        ${mandate.guestProfileId},
+        ${mandate.agentAddress},
+        ${mandate.bookingId},
+        ${mandate.quoteId},
+        ${mandate.tokenId},
+        ${mandate.maximumDeposit.toString()},
+        'active',
+        ${mandate.expiresAt},
+        ${mandate.createdAt},
+        ${mandate.updatedAt}
+      )
+      on conflict do nothing
+      returning id
+    `;
+    const [storedRow] = await this.sql<AgentPaymentMandateRow[]>`
+      select *
+      from nook.agent_payment_mandates
+      where idempotency_key = ${mandate.idempotencyKey}
+         or booking_id = ${mandate.bookingId}
+      order by (idempotency_key = ${mandate.idempotencyKey}) desc
+      limit 1
+    `;
+
+    if (!storedRow) {
+      throw new Error('Agent Payment Mandate insert returned no stored row');
+    }
+
+    const stored = mapAgentPaymentMandateRow(storedRow);
+
+    if (!sameAgentPaymentMandate(stored, mandate)) {
+      throw new DomainConflictError(
+        'agent_payment_mandate_idempotency_reused',
+        'Agent Payment Mandate authorization was reused with different terms',
+      );
+    }
+
+    return {
+      status: rows.length === 1 ? 'created' : 'idempotent',
+      mandate: stored,
+    };
+  }
+
+  async getById(id: string): Promise<AgentPaymentMandate | undefined> {
+    const [row] = await this.sql<AgentPaymentMandateRow[]>`
+      select *
+      from nook.agent_payment_mandates
+      where id = ${id}
+    `;
+
+    return row ? mapAgentPaymentMandateRow(row) : undefined;
+  }
+
+  async getByBookingId(bookingId: string): Promise<AgentPaymentMandate | undefined> {
+    const [row] = await this.sql<AgentPaymentMandateRow[]>`
+      select *
+      from nook.agent_payment_mandates
+      where booking_id = ${bookingId}
+    `;
+
+    return row ? mapAgentPaymentMandateRow(row) : undefined;
+  }
+}
+
 export class PostgresRentalReputationRepository implements RentalReputationPort {
   constructor(private readonly sql: PostgresClient) {}
 
@@ -899,6 +1003,7 @@ export class PostgresRentalReputationRepository implements RentalReputationPort 
 function depositRequestPayload(input: PrepareDepositOperationInput) {
   return {
     amountAtomic: input.booking.depositAmount.toString(),
+    ...(input.agentPaymentMandateId ? { agentPaymentMandateId: input.agentPaymentMandateId } : {}),
     bookingId: input.booking.id,
     escrowRecipientRef: input.escrowRecipientRef,
     publicEvidenceRef: input.publicEvidenceRef,
@@ -925,6 +1030,7 @@ function depositTerms(
   payload: Record<string, string | number | boolean | null>,
 ): Record<string, string | number | boolean | null> {
   return {
+    agentPaymentMandateId: payload.agentPaymentMandateId ?? null,
     amountAtomic: payload.amountAtomic ?? null,
     bookingId: payload.bookingId ?? null,
     escrowRecipientRef: payload.escrowRecipientRef ?? null,
@@ -999,6 +1105,46 @@ export class PostgresDepositOperationRepository implements DepositOperationRepos
           'deposit_idempotency_key_reused',
           'Deposit idempotency key was reused with different terms',
         );
+      }
+
+      if (input.agentPaymentMandateId) {
+        const consumed = await transaction<{ id: string }[]>`
+          update nook.agent_payment_mandates
+          set
+            status = 'consumed',
+            operation_id = ${operation.id},
+            consumed_at = ${input.now},
+            updated_at = ${input.now}
+          where id = ${input.agentPaymentMandateId}
+            and booking_id = ${input.booking.id}
+            and guest_profile_id = ${input.booking.guestProfileId}
+            and quote_id = ${input.booking.quoteId}
+            and token_id = ${input.booking.settlementTokenId}
+            and maximum_deposit_atomic >= ${input.booking.depositAmount.toString()}::numeric
+            and status = 'active'
+            and expires_at > ${input.now}
+          returning id
+        `;
+
+        if (consumed.length === 0) {
+          const [existingMandate] = await transaction<AgentPaymentMandateRow[]>`
+            select *
+            from nook.agent_payment_mandates
+            where id = ${input.agentPaymentMandateId}
+            for update
+          `;
+
+          if (
+            !existingMandate ||
+            existingMandate.status !== 'consumed' ||
+            existingMandate.operation_id !== operation.id
+          ) {
+            throw new DomainConflictError(
+              'agent_payment_mandate_not_usable',
+              'The Agent Payment Mandate cannot authorize this deposit Operation',
+            );
+          }
+        }
       }
 
       await transaction`
