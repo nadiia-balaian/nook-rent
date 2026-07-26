@@ -18,6 +18,28 @@ function client(fetchImplementation: typeof fetch) {
 }
 
 describe('ENS Graph client', () => {
+  it('prefers readable wrapped names over unnormalized label hashes', async () => {
+    const fetchImplementation = vi.fn<typeof fetch>(() =>
+      Promise.resolve(
+        Response.json({
+          data: {
+            domains: [
+              {
+                name: `[${'4d7bd8ea86ef2defbc1fe4a8d1dd60bb7c485d7f8fa0f20df5022a9423185612'}].eth`,
+              },
+            ],
+            wrappedDomains: [{ name: 'nadiia.eth' }],
+          },
+        }),
+      ),
+    );
+
+    const signal = await client(fetchImplementation).listOwnedNames(WALLET_ADDRESS);
+
+    expect(signal.ownedNames).toEqual(['nadiia.eth']);
+    expect(fetchImplementation.mock.calls[0]?.[1]?.body).toContain('wrappedDomains');
+  });
+
   it('returns owned ENS names from the official mainnet subgraph', async () => {
     const fetchImplementation = vi.fn<typeof fetch>(() =>
       Promise.resolve(

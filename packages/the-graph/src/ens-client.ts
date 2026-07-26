@@ -6,14 +6,16 @@ import {
 import { z } from 'zod';
 
 const EVM_ADDRESS = /^0x[0-9a-fA-F]{40}$/;
+const UNNORMALIZED_LABEL = /(^|\.)\[[0-9a-f]{64}\](?=\.|$)/i;
+
+const domainSchema = z.object({
+  name: z.string().nullish(),
+});
 
 const graphResponseSchema = z.object({
   data: z.object({
-    domains: z.array(
-      z.object({
-        name: z.string().nullish(),
-      }),
-    ),
+    domains: z.array(domainSchema),
+    wrappedDomains: z.array(domainSchema).default([]),
   }),
   errors: z.array(z.object({ message: z.string().optional() }).passthrough()).optional(),
 });
@@ -26,6 +28,9 @@ const OWNED_ENS_NAMES_QUERY = `
       orderBy: createdAt
       orderDirection: desc
     ) {
+      name
+    }
+    wrappedDomains(first: $first, where: { owner: $owner }) {
       name
     }
   }
@@ -49,6 +54,25 @@ function normalizeAddress(address: string): string {
   }
 
   return address.toLowerCase();
+}
+
+function readableNames(input: Array<{ name?: string | null | undefined }>): string[] {
+  const names: string[] = [];
+  const seen = new Set<string>();
+
+  for (const record of input) {
+    const name = record.name?.trim();
+    const normalized = name?.toLowerCase();
+
+    if (!name || !normalized || UNNORMALIZED_LABEL.test(normalized) || seen.has(normalized)) {
+      continue;
+    }
+
+    seen.add(normalized);
+    names.push(name);
+  }
+
+  return names;
 }
 
 export class EnsGraphClient implements EnsNameReaderPort {
@@ -115,9 +139,10 @@ export class EnsGraphClient implements EnsNameReaderPort {
         );
       }
 
-      const names = parsed.data.data.domains
-        .map(({ name }) => name?.trim())
-        .filter((name): name is string => Boolean(name));
+      const names = readableNames([
+        ...parsed.data.data.domains,
+        ...parsed.data.data.wrappedDomains,
+      ]);
 
       return {
         provider: 'the_graph',
