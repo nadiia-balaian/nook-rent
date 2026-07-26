@@ -316,7 +316,7 @@ describeWithDatabase('Postgres Reservation Hold repository', () => {
     });
   });
 
-  it('allows only one active hold per anonymous verified human', async () => {
+  it('allows only one active hold per Member profile', async () => {
     const stayRange = StayRange.fromStrings({
       checkIn: '2026-08-10',
       checkOut: '2026-08-15',
@@ -337,8 +337,8 @@ describeWithDatabase('Postgres Reservation Hold repository', () => {
       repository.createActive({
         requestId: 'request-human-limit-second',
         listingId: LISTING_ID,
-        guestProfileId: GUEST_TWO_ID,
-        quoteId: QUOTE_TWO_ID,
+        guestProfileId: GUEST_ONE_ID,
+        quoteId: QUOTE_ONE_ID,
         stayRange,
         expiresAt: '2026-07-25T10:10:00.000Z',
         now: NOW,
@@ -350,6 +350,43 @@ describeWithDatabase('Postgres Reservation Hold repository', () => {
     ).rejects.toMatchObject({
       conflict: 'human_active_hold_limit',
     });
+  });
+
+  it('allows the shared demo Agent wallet to serve separate Member profiles', async () => {
+    const stayRange = StayRange.fromStrings({
+      checkIn: '2026-08-10',
+      checkOut: '2026-08-15',
+    });
+    const sharedAgent = authorization('world-shared-agent-one', '7');
+
+    const first = await repository.createActive({
+      requestId: 'request-shared-agent-one',
+      listingId: LISTING_ID,
+      guestProfileId: GUEST_ONE_ID,
+      quoteId: QUOTE_ONE_ID,
+      stayRange,
+      expiresAt: '2026-07-25T10:05:00.000Z',
+      now: NOW,
+      authorization: sharedAgent,
+    });
+
+    expect(first.status).toBe('created');
+
+    const second = await repository.createActive({
+      requestId: 'request-shared-agent-two',
+      listingId: LISTING_ID,
+      guestProfileId: GUEST_TWO_ID,
+      quoteId: QUOTE_TWO_ID,
+      stayRange,
+      expiresAt: '2026-07-25T10:15:00.000Z',
+      now: '2026-07-25T10:06:00.000Z',
+      authorization: {
+        ...sharedAgent,
+        nonce: 'world-shared-agent-two',
+      },
+    });
+
+    expect(second.status).toBe('created');
   });
 
   it('rejects reuse of one request ID for different Booking terms', async () => {
@@ -576,7 +613,7 @@ describeWithDatabase('Postgres Reservation Hold repository', () => {
       where schemaname = 'nook'
     `;
 
-    expect(tables).toHaveLength(17);
+    expect(tables).toHaveLength(20);
     expect(tables.every((table) => table.relrowsecurity)).toBe(true);
     expect(policies[0]?.policy_count).toBe(0);
   });
